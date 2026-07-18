@@ -24,6 +24,19 @@ SESSION_STRING = os.environ.get("SESSION_STRING", "")
 # victim action logs get posted. Must be a chat/channel the bot is in.
 ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "0"))
 
+# --- Which group(s) to actually moderate ---
+# Comma-separated chat ids, e.g. "-1001234567890,-1009876543210".
+# Leave empty to moderate EVERY group this account is in (not
+# recommended while testing — use this to restrict to just your test
+# group). Find a group's id by sending any message in it once with
+# TARGET_CHAT_IDS empty and checking the Railway logs for
+# "[DEBUG] message from chat ...".
+_raw_target_ids = os.environ.get("TARGET_CHAT_IDS", "").strip()
+TARGET_CHAT_IDS = (
+    [int(x.strip()) for x in _raw_target_ids.split(",") if x.strip()]
+    if _raw_target_ids else []
+)
+
 # --- Persistent storage ---
 # On Railway: create a Volume, mount it at e.g. /data, and set DATA_DIR=/data.
 # Without a mounted volume, files here are wiped on every redeploy.
