@@ -1,0 +1,54 @@
+{"text": "pm pannuga", "warn": true, "reason": "solicitation"}
+{"text": "dm pannunga", "warn": true, "reason": "solicitation"}
+{"text": "please dm me", "warn": true, "reason": "solicitation"}
+{"text": "pm pannatha", "warn": false, "reason": "negated"}
+{"text": "dm pannathinga please", "warn": false, "reason": "negated"}
+{"text": "pm pannuga vendam", "warn": false, "reason": "negated"}
+{"text": "aunty msg pannatha", "warn": false, "reason": "negated"}
+{"text": "no dm please", "warn": false, "reason": "negated"}
+{"text": "don't dm me", "warn": false, "reason": "negated"}
+{"text": "stop dm-ing me", "warn": false, "reason": "negated"}
+{"text": "no pm no dm", "warn": false, "reason": "negated"}
+{"text": "no enaku dm pannathinga", "warn": false, "reason": "negated"}
+{"text": "9pm pannuga", "warn": false, "reason": "time reference not solicitation"}
+{"text": "5 pm meeting today", "warn": false, "reason": "time reference"}
+{"text": "11am call pannuga", "warn": false, "reason": "time reference"}
+{"text": "any akka msg me", "warn": true, "reason": "solicitation directed at akka"}
+{"text": "any akka irukingala", "warn": false, "reason": "presence query"}
+{"text": "akka mela msg paaru", "warn": false, "reason": "reference to existing message"}
+{"text": "any aunty irukingala", "warn": true, "reason": "aunty solicitation pattern"}
+{"text": "nice group akka thanks", "warn": false, "reason": "bare mention no verb"}
+{"text": "fwb only interested", "warn": true, "reason": "unwanted msg in group chat"}
+{"text": "looking for fwb here", "warn": true, "reason": "unwanted msg in group chat"}
+{"text": "fwb means friends with benefit lol", "warn": true, "reason": "unwanted msg in group chat"}
+{"text": "msg pannuga please", "warn": true, "reason": "solicitation"}
+{"text": "inbox pannunga", "warn": true, "reason": "solicitation"}
+{"text": "message pannunga girls", "warn": true, "reason": "solicitation"}
+{"text": "pm venda", "warn": false, "reason": "negated"}
+{"text": "dm illa vendam", "warn": false, "reason": "negated"}
+{"text": "msg maaten", "warn": false, "reason": "negated"}
+{"text": "never dm me", "warn": false, "reason": "negated"}
+{"text": "3pm pannunga call today", "warn": false, "reason": "time reference"}
+{"text": "10am pannuga meeting", "warn": false, "reason": "time reference"}
+{"text": "7pm sharp pannunga", "warn": false, "reason": "time reference"}
+{"text": "akka msg pannunga", "warn": true, "reason": "solicitation directed at akka"}
+{"text": "akka irukka here", "warn": false, "reason": "presence query"}
+{"text": "akka mela paaru message", "warn": false, "reason": "reference to existing message"}
+{"text": "aunty irukka here", "warn": true, "reason": "aunty solicitation pattern"}
+{"text": "aunty msg pannunga", "warn": true, "reason": "aunty solicitation pattern"}
+{"text": "any fwb here", "warn": true, "reason": "unwanted msg in group chat"}
+{"text": "fwb dm me", "warn": true, "reason": "unwanted msg in group chat"}
+{"text": "En ex pathi pesuvon", "warn": true, "reason": "admin_feedback: initiating ex-partner/romantic talk in group"}
+{"text": "Antha sonna d.m la nakkittu irukku", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Vetrii naa enna solluren ivangala maari grp la kaththu d.m pannatha", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Nee yen d.m panna", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Illa onnum illa 18 + inga ye kelungada athu enna d.m la bayam pu... Irukkula apdina arippu edukka kudathu", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Tham bi inga vaa d.m pannatha raasa akka epdi adipenu theriyathu", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Irukku paarunga mela and d.m kuda panna", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Ayayayo ivanga d.m panrathula avangala delete panrathukku grp ah delete panren", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Oru thadavathan mariyatha maira solluven manusan thana nee yen grp la pesuna paambu koththuma unna d.m la nottura", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Ippo than paathen d.m vanthurukku inga paarunga man naa periya ivalam ilaa normal than grp la pesunga ok", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "Naa ungala mean pannalye neenga yeppo d.m anninga", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "D.m panra vela vachikatha palla odachiruva", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
+{"text": "dei sunni dm pannu da", "warn": true, "reason": "admin_feedback: instructing someone to DM, confirmed DM-intention"}
+{"text": "any kandroli dm pannu da", "warn": true, "reason": "admin_feedback: 'kandroli' is an abusive word, confirmed warn"}

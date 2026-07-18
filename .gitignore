@@ -1,0 +1,20 @@
+# Secrets / local env
+.env
+
+# Pyrogram session files (contain your login — never commit these)
+*.session
+*.session-journal
+moderation_userbot.session
+moderation_userbot_login.session
+
+# Local runtime data (Railway uses a mounted Volume for this instead)
+strikes.json
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# OS
+.DS_Store
