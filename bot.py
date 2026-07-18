@@ -175,6 +175,15 @@ async def handle_group_message(client, message: Message):
     if config.ADMIN_CHAT_ID and message.chat.id == config.ADMIN_CHAT_ID:
         return
 
+    # Always log this so you can find a group's chat id from Railway
+    # logs -- send one message in a group, look for this line, copy the
+    # id into TARGET_CHAT_IDS.
+    print(f"[DEBUG] message from chat id={message.chat.id} title={message.chat.title!r}")
+
+    if config.TARGET_CHAT_IDS and message.chat.id not in config.TARGET_CHAT_IDS:
+        # Restricted to specific group(s); this chat isn't one of them.
+        return
+
     user = message.from_user
     if user and getattr(user, "is_self", False):
         # This is a userbot, not a bot-token bot -- its own log/warning
@@ -292,6 +301,29 @@ async def handle_admin_feedback(client, cq: CallbackQuery):
     await cq.answer("Recorded and retrained.")
 
 
-if __name__ == "__main__":
+async def warm_peer_cache():
+    """
+    Fetch the full dialog list once at startup so Pyrogram caches the
+    access_hash for every chat/group/channel this account is in.
+    Userbots on a fresh session don't have this cached yet, which
+    causes intermittent "Peer id invalid" errors on incoming updates
+    from chats it hasn't explicitly fetched yet. This is a background
+    warning (not fatal), but warming the cache avoids it.
+    """
+    count = 0
+    async for _ in app.get_dialogs():
+        count += 1
+    print(f"Peer cache warmed — {count} chats loaded.")
+
+
+async def main():
+    await app.start()
     print("Starting moderation bot...")
-    app.run()
+    await warm_peer_cache()
+    from pyrogram import idle
+    await idle()
+    await app.stop()
+
+
+if __name__ == "__main__":
+    app.run(main())
