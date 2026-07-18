@@ -35,8 +35,23 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
     CallbackQuery,
     Message,
+    ChatPermissions,
 )
 from pyrogram.errors import RPCError
+
+# A fully-muted member: every permission explicitly off. Passing
+# permissions=None to restrict_chat_member crashes Pyrogram (it expects
+# a real ChatPermissions object to read attributes off of).
+MUTED_PERMISSIONS = ChatPermissions(
+    can_send_messages=False,
+    can_send_media_messages=False,
+    can_send_other_messages=False,
+    can_send_polls=False,
+    can_add_web_page_previews=False,
+    can_change_info=False,
+    can_invite_users=False,
+    can_pin_messages=False,
+)
 
 import config
 import conversation_tracker
@@ -97,7 +112,7 @@ async def apply_dm_mute(client, chat_id, user_id, mention, reason):
     """
     until = datetime.utcnow() + timedelta(hours=config.DM_MUTE_HOURS)
     try:
-        await client.restrict_chat_member(chat_id, user_id, permissions=None, until_date=until)
+        await client.restrict_chat_member(chat_id, user_id, permissions=MUTED_PERMISSIONS, until_date=until)
     except RPCError:
         pass
     await log_to_admin(
@@ -156,7 +171,7 @@ async def apply_blocklist_action(client, message: Message, user, mention, hits):
         until = datetime.utcnow() + timedelta(minutes=config.MUTE_MINUTES)
         try:
             await client.restrict_chat_member(
-                message.chat.id, user_id, permissions=None, until_date=until
+                message.chat.id, user_id, permissions=MUTED_PERMISSIONS, until_date=until
             )
         except RPCError:
             pass
@@ -175,14 +190,16 @@ async def handle_group_message(client, message: Message):
     if config.ADMIN_CHAT_ID and message.chat.id == config.ADMIN_CHAT_ID:
         return
 
-    # Always log this so you can find a group's chat id from Railway
-    # logs -- send one message in a group, look for this line, copy the
-    # id into TARGET_CHAT_IDS.
-    print(f"[DEBUG] message from chat id={message.chat.id} title={message.chat.title!r}")
-
-    if config.TARGET_CHAT_IDS and message.chat.id not in config.TARGET_CHAT_IDS:
-        # Restricted to specific group(s); this chat isn't one of them.
-        return
+    if config.TARGET_CHAT_IDS:
+        if message.chat.id not in config.TARGET_CHAT_IDS:
+            # Restricted to specific group(s); this chat isn't one of
+            # them. No debug print here either, once you've locked in a
+            # target this stays quiet for every other chat.
+            return
+    else:
+        # Discovery mode: no target set yet, log every chat so you can
+        # find the id you want. Once TARGET_CHAT_IDS is set, this stops.
+        print(f"[DEBUG] message from chat id={message.chat.id} title={message.chat.title!r}")
 
     user = message.from_user
     if user and getattr(user, "is_self", False):
