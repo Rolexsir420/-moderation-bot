@@ -52,3 +52,4 @@
 {"text": "D.m panra vela vachikatha palla odachiruva", "warn": false, "reason": "admin_feedback: complaining about / threatening someone else who DM'd, not soliciting a DM themselves"}
 {"text": "dei sunni dm pannu da", "warn": true, "reason": "admin_feedback: instructing someone to DM, confirmed DM-intention"}
 {"text": "any kandroli dm pannu da", "warn": true, "reason": "admin_feedback: 'kandroli' is an abusive word, confirmed warn"}
+{"text": "dm pannuga", "warn": true, "reason": "spelling_variant_of_pannunga"}
