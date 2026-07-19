@@ -230,20 +230,29 @@ async def handle_group_message(client, message: Message):
 
     if label == "warn":
         is_abusive = True
-    elif label == "uncertain" and anchor_present:
-        # Score didn't clear WARN_THRESHOLD, but DM-solicitation wording
-        # (pm/dm/msg/akka/aunty/fwb/ex) is present in the message. Per
-        # admin preference: auto-mute directly rather than queue for
-        # admin review — e.g. "any akka dm" (score 0.87, below 1.5).
+    elif label == "uncertain" and anchor_present and total >= 0:
+        # Score didn't clear WARN_THRESHOLD, but it's still net-positive
+        # (leaning toward warn) AND DM-solicitation wording (pm/dm/msg/
+        # akka/aunty/fwb/ex) is present. Per admin preference: auto-mute
+        # directly rather than queue for admin review — e.g. "any akka
+        # dm" (score 0.87, below 1.5 but clearly leaning warn).
+        #
+        # total < 0 is excluded here on purpose: a negative score means
+        # the model itself leans toward safe (e.g. "enaku dm
+        # pannathinga" = "please don't dm me" scores -0.93 -- correctly
+        # safe-leaning, just not quite past the strict -1.5 cutoff).
+        # Muting those was a real bug -- context words the model
+        # recognized as negation/refusal were being overridden just
+        # because an anchor word was technically present.
         is_abusive = True
         await log_to_admin(
             f"🔇 Auto-muted {mention} (score={total:.2f}, below warn threshold "
-            f"but DM-solicitation wording present) in {message.chat.title}:\n"
-            f"“{text}”"
+            f"but leaning warn with DM-solicitation wording present) in "
+            f"{message.chat.title}:\n“{text}”"
         )
     else:
-        # label == "safe", or "uncertain" with no anchor at all (nothing
-        # DM-related in the message to begin with) -- no action.
+        # label == "safe", or "uncertain" with no anchor, or "uncertain"
+        # with an anchor but a safe-leaning (negative) score -- no action.
         is_abusive = False
 
     # record into the rolling window regardless of label, so future
