@@ -1,13 +1,13 @@
 """
 Learns moderation decisions from labeled (text, warn) examples.
-No hardcoded word lists for akka/aunty/mela/irukingala/negation —
+No hardcoded word lists for akka/aunty/mela/irukingala/negation --
 the model figures out which context words push toward warn/no-warn
 around each anchor keyword, purely from the labeled data.
 
 Approach: per-anchor Naive-Bayes-style log-odds over context words
 found near that anchor. Each anchor (pm, dm, msg, akka, aunty, fwb...)
 gets its own vocabulary, so "irukingala" can mean something different
-next to "akka" than next to "aunty" — the data decides, not us.
+next to "akka" than next to "aunty" -- the data decides, not us.
 """
 
 import json
@@ -27,6 +27,33 @@ def tokenize(text):
     # keep digits glued to letters ("9pm" stays "9pm", not stripped to "pm")
     # so the model can actually learn "digit+pm/am = time" from data
     return re.findall(r"[a-zA-Z0-9']+", text.lower())
+
+
+def collapse_repeated_letters(tokens):
+    """
+    Catches anchors stretched out with repeated letters ("dmmmmm",
+    "pmmmm", "msggggg") which would otherwise never match ANCHORS as
+    a literal string. Collapses runs of 3+ identical letters down to
+    a single letter (so "dmmmmm" -> "dm", "msggggg" -> "msg"), then
+    checks if the result is an anchor. Only touches tokens that are
+    NOT already a real word/anchor, so normal words aren't mangled.
+    Returns (tokens, flags) where flags[i] is True if that token was
+    reconstructed this way.
+    """
+    result, flags = [], []
+    for tok in tokens:
+        if tok in ANCHORS:
+            result.append(tok)
+            flags.append(False)
+            continue
+        collapsed = re.sub(r"(.)\1{2,}", r"\1", tok)
+        if collapsed in ANCHORS and collapsed != tok:
+            result.append(collapsed)
+            flags.append(True)
+        else:
+            result.append(tok)
+            flags.append(False)
+    return result, flags
 
 
 def merge_split_anchors(tokens):
@@ -66,6 +93,7 @@ def extract_features(text):
     """
     raw_tokens = tokenize(text)
     tokens, split_flags = merge_split_anchors(raw_tokens)
+    tokens, stretch_flags = collapse_repeated_letters(tokens)
     found = []
     time_pattern = re.compile(r"^\d{1,2}(am|pm)$")
 
@@ -83,9 +111,9 @@ def extract_features(text):
             if is_time_glued:
                 found.append((base, "DIGIT_GLUED"))
             if split_flags[i]:
-                # so the model can learn from data whether this evasion
-                # pattern itself correlates with warn/safe
                 found.append((base, "PUNCT_SPLIT_ANCHOR"))
+            if stretch_flags[i]:
+                found.append((base, "STRETCHED_LETTERS"))
             lo, hi = max(0, i - WINDOW), min(len(tokens), i + WINDOW + 1)
             for j in range(lo, hi):
                 if j == i:
