@@ -53,3 +53,63 @@
 {"text": "dei sunni dm pannu da", "warn": true, "reason": "admin_feedback: instructing someone to DM, confirmed DM-intention"}
 {"text": "any kandroli dm pannu da", "warn": true, "reason": "admin_feedback: 'kandroli' is an abusive word, confirmed warn"}
 {"text": "dm pannuga", "warn": true, "reason": "spelling_variant_of_pannunga"}
+{"text": "pm me", "warn": true, "reason": "direct_solicitation"}
+{"text": "msg me pls", "warn": true, "reason": "direct_solicitation"}
+{"text": "message pannunga", "warn": true, "reason": "direct_solicitation"}
+{"text": "dm me please", "warn": true, "reason": "direct_solicitation"}
+{"text": "p m pannuga", "warn": true, "reason": "spaced_letter_evasion"}
+{"text": "d.m pannuga", "warn": true, "reason": "punct_split_evasion"}
+{"text": "m s g me", "warn": true, "reason": "spaced_letter_evasion"}
+{"text": "any akka pm me", "warn": true, "reason": "solicitation directed at akka"}
+{"text": "ex girlfriend dm pannuga", "warn": true, "reason": "solicitation"}
+{"text": "pm ah irukka", "warn": false, "reason": "time_query_not_solicitation"}
+{"text": "enaku pm pannathinga", "warn": false, "reason": "negated"}
+{"text": "group message paaru", "warn": false, "reason": "reference_to_existing_message"}
+{"text": "9pm nu solringa", "warn": false, "reason": "time_reference"}
+{"text": "dm panra", "warn": true, "reason": "solicitation"}
+{"text": "msg pannunga bro", "warn": true, "reason": "solicitation"}
+{"text": "inbox me now", "warn": true, "reason": "solicitation"}
+{"text": "any girls dm me", "warn": true, "reason": "solicitation"}
+{"text": "single ah irundha dm pannuga", "warn": true, "reason": "solicitation"}
+{"text": "akka number kudunga dm la", "warn": true, "reason": "contact_solicitation"}
+{"text": "aunty pic anupunga dm", "warn": true, "reason": "contact_solicitation"}
+{"text": "d_m pannuga", "warn": true, "reason": "punct_split_evasion"}
+{"text": "p.m pannunga", "warn": true, "reason": "punct_split_evasion"}
+{"text": "dmm pannuga", "warn": true, "reason": "stretched_letter_evasion"}
+{"text": "pm ah class irukku", "warn": false, "reason": "time_reference"}
+{"text": "enaku msg pannadheenga", "warn": false, "reason": "negated"}
+{"text": "dm pannadha nala per", "warn": false, "reason": "negated"}
+{"text": "akka epdi irukinga", "warn": false, "reason": "presence_query"}
+{"text": "aunty va paakalaya", "warn": false, "reason": "unrelated_query"}
+{"text": "ex pathi pesama iru", "warn": false, "reason": "negated_topic"}
+{"text": "fwb nu solra pasanga silly", "warn": false, "reason": "meta_commentary"}
+{"text": "message vantha check pannuga", "warn": false, "reason": "normal_instruction"}
+{"text": "insta id dm pannuga", "warn": true, "reason": "contact_solicitation"}
+{"text": "whatsapp number pm pannuga", "warn": true, "reason": "contact_solicitation"}
+{"text": "contact tharuga dm", "warn": true, "reason": "contact_solicitation"}
+{"text": "snap id dm me", "warn": true, "reason": "contact_solicitation"}
+{"text": "interested ah irundha dm", "warn": true, "reason": "vague_bait"}
+{"text": "who is single dm me", "warn": true, "reason": "vague_bait"}
+{"text": "boys only dm pannuga", "warn": true, "reason": "vague_bait"}
+{"text": "girls dm pls", "warn": true, "reason": "vague_bait"}
+{"text": "serious ah irundha mattum dm", "warn": true, "reason": "vague_bait"}
+{"text": "ddmm pannuga", "warn": true, "reason": "letter_pair_evasion"}
+{"text": "d-m pannuga", "warn": true, "reason": "punct_split_evasion"}
+{"text": "m.s.g pannunga", "warn": true, "reason": "punct_split_evasion"}
+{"text": "dm pannuga anupunga", "warn": true, "reason": "solicitation_with_emoji_context"}
+{"text": "pm me anupunga", "warn": true, "reason": "solicitation_with_emoji_context"}
+{"text": "msg pannunga anupunga", "warn": true, "reason": "solicitation_with_emoji_context"}
+{"text": "gf venuma dm pannuga", "warn": true, "reason": "relationship_bait"}
+{"text": "bf venuma dm pannuga", "warn": true, "reason": "relationship_bait"}
+{"text": "secret ah pesanuma dm pannuga", "warn": true, "reason": "relationship_bait"}
+{"text": "dm pannadheenga scam nu solli", "warn": false, "reason": "anti_scam_warning"}
+{"text": "enaku bf venam nu solitten", "warn": false, "reason": "unrelated_statement"}
+{"text": "admin ku dm pannuga doubt irundha", "warn": false, "reason": "legitimate_admin_instruction"}
+{"text": "group la pm panra pasanga ku warning", "warn": false, "reason": "meta_discussion_about_pmers"}
+{"text": "9pm ku call pannuga", "warn": false, "reason": "time_reference"}
+{"text": "exam pathi msg pannunga teacher ku", "warn": false, "reason": "legitimate_message_request"}
+{"text": "dmmmmm pannuga", "warn": true, "reason": "stretched_letter_evasion"}
+{"text": "dmmm me", "warn": true, "reason": "stretched_letter_evasion"}
+{"text": "pmmmm pannunga", "warn": true, "reason": "stretched_letter_evasion"}
+{"text": "msggggg pannuga", "warn": true, "reason": "stretched_letter_evasion"}
+{"text": "dmmmm panra ah", "warn": true, "reason": "stretched_letter_evasion"}
