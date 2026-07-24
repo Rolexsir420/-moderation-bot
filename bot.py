@@ -35,23 +35,14 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
     CallbackQuery,
     Message,
-    ChatPermissions,
 )
 from pyrogram.errors import RPCError
 
-# A fully-muted member: every permission explicitly off. Passing
-# permissions=None to restrict_chat_member crashes Pyrogram (it expects
-# a real ChatPermissions object to read attributes off of).
-MUTED_PERMISSIONS = ChatPermissions(
-    can_send_messages=False,
-    can_send_media_messages=False,
-    can_send_other_messages=False,
-    can_send_polls=False,
-    can_add_web_page_previews=False,
-    can_change_info=False,
-    can_invite_users=False,
-    can_pin_messages=False,
-)
+# NOTE: this account no longer calls restrict_chat_member/ban_chat_member
+# itself. It only replies with a short admin-command-style text
+# (".delwarn ...", ".delmute Xh ...", ".delban ...") to the offending
+# message; the group's separate admin command bot infers the target
+# from that reply and performs the actual delete + mute/warn/ban.
 
 # Short, human-admin-style reason text per blocklist category, used in
 # the visible ".delwarn"/".delmute"/".delban" style reply so anyone
@@ -69,7 +60,7 @@ CATEGORY_REASONS = [
     ("emoji", "no 18+ talk in groupchat"),
     ("scam", "no scam/paid content"),
     ("service_paid", "no scam/paid content"),
-    ("relationship_dating", "no dating/hookup talk"),
+    ("relationship_dating", "no dating txt"),
     ("gender_orientation", "restricted topic"),
 ]
 
@@ -80,6 +71,11 @@ def reason_for_categories(categories):
         if cat in cat_set:
             return reason
     return "group rules violation"
+
+
+def format_duration(n):
+    """3.0 -> '3', 1.5 -> '1.5' -- matches how a human admin would type it."""
+    return str(int(n)) if float(n).is_integer() else str(n)
 
 import config
 import conversation_tracker
@@ -128,58 +124,44 @@ async def log_to_admin(text):
     if config.ADMIN_CHAT_ID:
         try:
             await app.send_message(config.ADMIN_CHAT_ID, text)
-        except RPCError:
-            pass
+        except RPCError as e:
+            print(f"[ERROR] log_to_admin send_message failed: {type(e).__name__}: {e}")
 
 
 async def apply_dm_mute(client, chat_id, user_id, mention, reason):
     """
-    Fixed action for a confirmed DM-intention message: mute the user for
-    config.DM_MUTE_HOURS. No escalation, no strike counting — every
-    confirmed DM-intention message gets this same response.
-
-    The group-visible ".delmute Xh no dm" text is sent by the caller
-    (handle_group_message), since only the caller has the original
-    Message object to reply to. This function just applies the
-    restriction and logs full detail to the admin chat.
+    Logs a DM-intention detection to the admin chat. The actual
+    ".delmute Xh no dm" reply that triggers the real mute is sent by
+    the caller (handle_group_message), since only the caller has the
+    original Message object (or the instigator's stored msg_id) to
+    reply to. This account does NOT restrict the member itself -- the
+    group's separate admin command bot performs the real action based
+    on that reply.
     """
-    until = datetime.utcnow() + timedelta(hours=config.DM_MUTE_HOURS)
-    try:
-        await client.restrict_chat_member(chat_id, user_id, permissions=MUTED_PERMISSIONS, until_date=until)
-    except RPCError:
-        pass
     await log_to_admin(
-        f"🔇 Muted {mention} for {config.DM_MUTE_HOURS}h (no dm) — {reason}"
+        f"🔇 Requested mute for {mention} ({config.DM_MUTE_HOURS}h, no dm) — {reason}. "
+        f"(Real mute performed by the group's admin command bot, not this account.)"
     )
 
 
 async def apply_blocklist_action(client, message: Message, user, mention, hits):
     """
     Deterministic path: reply to the offending message with a short,
-    human-admin-style command text (".delwarn no badwords",
-    ".delmute 60m no 18+ talk in groupchat", etc.) so anyone reviewing
-    recent group actions immediately understands why, delete the
-    message, escalate a strike, and act according to strikes.add_strike
-    (warn -> mute -> ban).
-
-    A blocklist hit always follows the plain strike ladder regardless of
-    whether DM-solicitation wording is also present in the same message —
-    e.g. "masturbation...dm" is a warn on strike 1, same as any other
-    first-time blocklist hit. (DM-solicitation on its own, with no
-    blocklist word, is handled separately in handle_group_message and
-    can escalate straight to mute — see the auto-mute-on-uncertain rule.)
+    human-admin-style command (".delwarn no badwords",
+    ".delmute 60m no 18+ talk in groupchat", ".delban ..."). This
+    account does NOT delete/mute/ban directly -- the group's separate
+    admin command bot picks up the reply (it infers the target from
+    the reply-to relationship, no @mention needed) and performs the
+    actual delete + action. We only decide WHICH command to send,
+    based on our own strike escalation (warn -> mute -> ban).
     """
     categories = sorted({cat for cat, term in hits})
     reason = reason_for_categories(categories)
     user_id = user.id if user else None
 
     if user_id is None:
-        try:
-            await message.delete()
-        except RPCError:
-            pass
         await log_to_admin(
-            f"🚫 Blocklist hit ({', '.join(categories)}) but no user id — message deleted, no strike applied."
+            f"🚫 Blocklist hit ({', '.join(categories)}) but no user id — no command sent."
         )
         return
 
@@ -192,30 +174,10 @@ async def apply_blocklist_action(client, message: Message, user, mention, hits):
     else:
         cmd_text = f".delwarn {reason}"
 
-    # Reply first (while the message still exists so it's a real quoted
-    # reply), then delete.
     try:
         await message.reply_text(cmd_text)
-    except RPCError:
-        pass
-    try:
-        await message.delete()
-    except RPCError:
-        pass
-
-    if action == "ban":
-        try:
-            await client.ban_chat_member(message.chat.id, user_id)
-        except RPCError:
-            pass
-    elif action == "mute":
-        until = datetime.utcnow() + timedelta(minutes=config.MUTE_MINUTES)
-        try:
-            await client.restrict_chat_member(
-                message.chat.id, user_id, permissions=MUTED_PERMISSIONS, until_date=until
-            )
-        except RPCError:
-            pass
+    except RPCError as e:
+        print(f"[ERROR] blocklist reply_text failed: {type(e).__name__}: {e}")
 
     # Full detail (strike count, all matched categories) still goes to
     # the admin chat, even though the group only sees the short command.
@@ -308,54 +270,54 @@ async def handle_group_message(client, message: Message):
     if not is_abusive:
         return
 
-    instigator_id = conversation_tracker.find_instigator(
+    instigator_id, instigator_msg_id = conversation_tracker.find_instigator(
         chat_id=message.chat.id,
         target_user_id=user.id if user else None,
         target_msg_id=message.id,
         reply_to_id=message.reply_to_message_id,
     )
 
-    dm_cmd_text = f".delmute {config.DM_MUTE_HOURS}h no dm"
+    dm_cmd_text = f".delmute {format_duration(config.DM_MUTE_HOURS)}h no dm"
 
     if instigator_id:
         # this sender was reacting to someone else's DM-soliciting message
-        # (per conversation_tracker) — soft note for them, no mute; the
-        # mute goes to the instigator instead.
+        # (per conversation_tracker) — soft note for them, no command;
+        # the mute request goes to the instigator's original message
+        # instead, since the admin command bot infers the target from
+        # the reply-to relationship.
         try:
             await message.reply_text(
                 f"Unga message remove pannitten {mention}. Please report to admins "
                 f"instead of replying in the group. 🙏"
             )
-        except RPCError:
-            pass
-        try:
-            await message.delete()
-        except RPCError:
-            pass
-        # We don't hold the instigator's original Message object (only
-        # their user_id from conversation_tracker), so this can't be a
-        # literal quoted reply -- still a plain command-style message
-        # tagging them.
-        try:
-            await client.send_message(
-                message.chat.id, f"{dm_cmd_text} (user {instigator_id})"
-            )
-        except RPCError:
-            pass
+        except RPCError as e:
+            print(f"[ERROR] instigator soft-note reply_text failed: {type(e).__name__}: {e}")
+        if instigator_msg_id:
+            try:
+                await client.send_message(
+                    message.chat.id, dm_cmd_text, reply_to_message_id=instigator_msg_id
+                )
+            except RPCError as e:
+                print(f"[ERROR] instigator dm_cmd reply failed: {type(e).__name__}: {e}")
+        else:
+            # Shouldn't happen (find_instigator only returns an id when
+            # it also has the msg_id), but fall back to a plain tag so
+            # nothing is silently dropped.
+            try:
+                await client.send_message(
+                    message.chat.id, f"{dm_cmd_text} (user {instigator_id})"
+                )
+            except RPCError as e:
+                print(f"[ERROR] instigator dm_cmd fallback failed: {type(e).__name__}: {e}")
         await apply_dm_mute(
             client, message.chat.id, instigator_id, f"user {instigator_id}",
             reason=f"DM-intention message that {mention} was reacting to",
         )
     else:
-        # Reply first (while the message still exists), then delete.
         try:
             await message.reply_text(dm_cmd_text)
-        except RPCError:
-            pass
-        try:
-            await message.delete()
-        except RPCError:
-            pass
+        except RPCError as e:
+            print(f"[ERROR] dm_mute reply_text failed: {type(e).__name__}: {e}")
         await apply_dm_mute(
             client, message.chat.id, user.id if user else None, mention,
             reason=f"“{text}” (score={total:.2f})",
