@@ -34,13 +34,13 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
     """
     Given a flagged message from target_user_id, check whether it's a
     reply/reaction to an earlier abusive message directed at them.
-    Returns the instigator's user_id if found, else None (meaning
-    target_user_id is the first abusive message in this thread, as far
-    as we can tell from the recent window).
+    Returns (instigator_user_id, instigator_msg_id) if found, else
+    (None, None) (meaning target_user_id is the first abusive message
+    in this thread, as far as we can tell from the recent window).
     """
     buf = history.get(chat_id)
     if not buf:
-        return None
+        return None, None
 
     now = time.time()
 
@@ -49,7 +49,7 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
     if reply_to_id:
         for m in buf:
             if m["msg_id"] == reply_to_id and m["is_abusive"] and m["user_id"] != target_user_id:
-                return m["user_id"]
+                return m["user_id"], m["msg_id"]
 
     # 2) fallback: no explicit reply_to — look at the recent window for
     #    an earlier abusive message from someone else aimed at this user
@@ -59,6 +59,6 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
     ]
     for m in participants_recent:
         if m["is_abusive"] and m["user_id"] != target_user_id:
-            return m["user_id"]
+            return m["user_id"], m["msg_id"]
 
-    return None
+    return None, None
