@@ -53,6 +53,34 @@ MUTED_PERMISSIONS = ChatPermissions(
     can_pin_messages=False,
 )
 
+# Short, human-admin-style reason text per blocklist category, used in
+# the visible ".delwarn"/".delmute"/".delban" style reply so anyone
+# checking recent group actions immediately understands why -- same
+# convention as a human admin typing ".delmute 3h no dm" manually.
+# Priority order matters when a message hits multiple categories at
+# once: the first matching entry here wins, keeping the visible reason
+# short and singular rather than listing every category.
+CATEGORY_REASONS = [
+    ("caste_hate", "no hate speech"),
+    ("tamil_abusive", "no badwords"),
+    ("sexual", "no 18+ talk in groupchat"),
+    ("tamil_sexual_slang", "no 18+ talk in groupchat"),
+    ("clothing_body", "no 18+ talk in groupchat"),
+    ("emoji", "no 18+ talk in groupchat"),
+    ("scam", "no scam/paid content"),
+    ("service_paid", "no scam/paid content"),
+    ("relationship_dating", "no dating/hookup talk"),
+    ("gender_orientation", "restricted topic"),
+]
+
+
+def reason_for_categories(categories):
+    cat_set = set(categories)
+    for cat, reason in CATEGORY_REASONS:
+        if cat in cat_set:
+            return reason
+    return "group rules violation"
+
 import config
 import conversation_tracker
 import strikes
@@ -109,6 +137,11 @@ async def apply_dm_mute(client, chat_id, user_id, mention, reason):
     Fixed action for a confirmed DM-intention message: mute the user for
     config.DM_MUTE_HOURS. No escalation, no strike counting — every
     confirmed DM-intention message gets this same response.
+
+    The group-visible ".delmute Xh no dm" text is sent by the caller
+    (handle_group_message), since only the caller has the original
+    Message object to reply to. This function just applies the
+    restriction and logs full detail to the admin chat.
     """
     until = datetime.utcnow() + timedelta(hours=config.DM_MUTE_HOURS)
     try:
@@ -122,10 +155,12 @@ async def apply_dm_mute(client, chat_id, user_id, mention, reason):
 
 async def apply_blocklist_action(client, message: Message, user, mention, hits):
     """
-    Deterministic path: delete the message, escalate a strike, and act
-    according to strikes.add_strike (warn -> mute -> ban), based on the
-    hardcoded blocklist in blocklist.py. Always logs the hit categories
-    (not the raw matched word) to the admin chat.
+    Deterministic path: reply to the offending message with a short,
+    human-admin-style command text (".delwarn no badwords",
+    ".delmute 60m no 18+ talk in groupchat", etc.) so anyone reviewing
+    recent group actions immediately understands why, delete the
+    message, escalate a strike, and act according to strikes.add_strike
+    (warn -> mute -> ban).
 
     A blocklist hit always follows the plain strike ladder regardless of
     whether DM-solicitation wording is also present in the same message —
@@ -135,14 +170,14 @@ async def apply_blocklist_action(client, message: Message, user, mention, hits):
     can escalate straight to mute — see the auto-mute-on-uncertain rule.)
     """
     categories = sorted({cat for cat, term in hits})
+    reason = reason_for_categories(categories)
     user_id = user.id if user else None
 
-    try:
-        await message.delete()
-    except RPCError:
-        pass
-
     if user_id is None:
+        try:
+            await message.delete()
+        except RPCError:
+            pass
         await log_to_admin(
             f"🚫 Blocklist hit ({', '.join(categories)}) but no user id — message deleted, no strike applied."
         )
@@ -150,12 +185,21 @@ async def apply_blocklist_action(client, message: Message, user, mention, hits):
 
     count, action = strikes.add_strike(user_id)
 
+    if action == "ban":
+        cmd_text = f".delban {reason}"
+    elif action == "mute":
+        cmd_text = f".delmute {config.MUTE_MINUTES}m {reason}"
+    else:
+        cmd_text = f".delwarn {reason}"
+
+    # Reply first (while the message still exists so it's a real quoted
+    # reply), then delete.
     try:
-        await client.send_message(
-            message.chat.id,
-            f"⚠️ {mention}, your message was removed for violating group rules "
-            f"({', '.join(categories)}). Strike {count}.",
-        )
+        await message.reply_text(cmd_text)
+    except RPCError:
+        pass
+    try:
+        await message.delete()
     except RPCError:
         pass
 
@@ -164,9 +208,6 @@ async def apply_blocklist_action(client, message: Message, user, mention, hits):
             await client.ban_chat_member(message.chat.id, user_id)
         except RPCError:
             pass
-        await log_to_admin(
-            f"⛔ Banned {mention} — strike {count} ({', '.join(categories)})"
-        )
     elif action == "mute":
         until = datetime.utcnow() + timedelta(minutes=config.MUTE_MINUTES)
         try:
@@ -175,14 +216,12 @@ async def apply_blocklist_action(client, message: Message, user, mention, hits):
             )
         except RPCError:
             pass
-        await log_to_admin(
-            f"🔇 Muted {mention} for {config.MUTE_MINUTES}m — strike {count} "
-            f"({', '.join(categories)})"
-        )
-    else:
-        await log_to_admin(
-            f"🚩 Warned {mention} — strike {count} ({', '.join(categories)})"
-        )
+
+    # Full detail (strike count, all matched categories) still goes to
+    # the admin chat, even though the group only sees the short command.
+    await log_to_admin(
+        f"{cmd_text} — {mention}, strike {count} (categories: {', '.join(categories)})"
+    )
 
 
 @app.on_message(filters.group & filters.text)
@@ -276,21 +315,30 @@ async def handle_group_message(client, message: Message):
         reply_to_id=message.reply_to_message_id,
     )
 
-    # Always remove the flagged message itself.
-    try:
-        await message.delete()
-    except RPCError:
-        pass
+    dm_cmd_text = f".delmute {config.DM_MUTE_HOURS}h no dm"
 
     if instigator_id:
         # this sender was reacting to someone else's DM-soliciting message
         # (per conversation_tracker) — soft note for them, no mute; the
         # mute goes to the instigator instead.
         try:
-            await client.send_message(
-                message.chat.id,
+            await message.reply_text(
                 f"Unga message remove pannitten {mention}. Please report to admins "
-                f"instead of replying in the group. 🙏",
+                f"instead of replying in the group. 🙏"
+            )
+        except RPCError:
+            pass
+        try:
+            await message.delete()
+        except RPCError:
+            pass
+        # We don't hold the instigator's original Message object (only
+        # their user_id from conversation_tracker), so this can't be a
+        # literal quoted reply -- still a plain command-style message
+        # tagging them.
+        try:
+            await client.send_message(
+                message.chat.id, f"{dm_cmd_text} (user {instigator_id})"
             )
         except RPCError:
             pass
@@ -299,6 +347,15 @@ async def handle_group_message(client, message: Message):
             reason=f"DM-intention message that {mention} was reacting to",
         )
     else:
+        # Reply first (while the message still exists), then delete.
+        try:
+            await message.reply_text(dm_cmd_text)
+        except RPCError:
+            pass
+        try:
+            await message.delete()
+        except RPCError:
+            pass
         await apply_dm_mute(
             client, message.chat.id, user.id if user else None, mention,
             reason=f"“{text}” (score={total:.2f})",
