@@ -24,30 +24,39 @@ import re
 
 CATEGORIES = {
     "sexual": {
-        "sex", "sexy", "porn", "pornography", "nude", "boobs", "penis",
-        "pussy", "dick", "ass", "buttocks", "fingering", "foreplay",
-        "masturbation", "lick", "kiss", "fucking", "fucked",
+        "sex", "sexy", "porn", "pornography", "nude", "nudee", "boobs",
+        "booby", "penis", "pussy", "dick", "ass", "buttocks", "fingering",
+        "foreplay", "masturbation", "lick", "kiss", "fucking", "fucked",
+        "fuck", "motherfucker", "incest", "bdsm", "gangbang", "rape",
+        "cuckold", "cuck", "bisex", "dildo", "whore", "hoe", "blowjob",
+        "bikini", "tits", "video call vanga",
     },
     "relationship_dating": {
         "hookup", "hookups", "fwb", "wife", "married", "darling", "baby",
         "milf", "bhabhi", "housewife", "available", "virgin",
+        "couple exchange", "item irukingla", "personal ah pesalam",
+        "real meet me",
     },
     "gender_orientation": {
         "lesbian", "lesbians", "gay", "gays", "bisexual", "transgender",
-        "shemale", "trans", "aravaani", "vaanavil",
+        "shemale", "trans", "aravaani", "vaanavil", "vanavil",
     },
     "tamil_abusive": {
         "thevidiya", "thevudiya", "tevadiya", "tevudiya", "thevdiya",
         "thevadiya",
-        "thayoli", "gommala", "gomma", "kandaroli", "mayiru", "mayirandi",
-        "mairu", "mairru", "ommala", "oombu", "oombi", "ombuga", "oompi",
-        "ottha", "otha", "olumaari", "olu maari", "koothi", "lavade",
-        "punda", "punde", "potta", "funda", "ungoppa", "ungoppan",
-        "bastard", "fucker",
+        "thayoli", "gommala", "gommalaka", "gomma", "kandaroli", "mayiru",
+        "mayirandi", "mairu", "mairru", "ommala", "oombu", "oombi",
+        "ombuga", "oompi", "ottha", "otha", "olumaari", "olu maari",
+        "koothi", "koodhi", "lavade", "punda", "punde", "bunda", "potta",
+        "funda", "ungoppa", "ungoppan", "ungomma", "bastard", "fucker",
+        "vibachari", "avusari", "avuthu", "munda", "baadu", "wathalaka",
+        "okuren", "okanum", "ollu", "olu", "oluka", "oluthu",
+        "ugomma",
     },
     "tamil_sexual_slang": {
         "sunni", "junni", "jumni", "kunju", "kundi", "kundiadi", "kuthi",
-        "sappu", "umbu", "oolu",
+        "sappu", "umbu", "oolu", "oomba", "nakku", "nakkuren", "poolu",
+        "kai adikuren",
         # Tamil script
         "புண்டை", "புண்ட", "சுன்னி", "குத்து", "ஊம்பு", "ஊம்ப", "சப்பு",
         "விந்து", "முலை", "பூலு", "பூல்", "கையடி", "ஓத்தா", "ஓக்காளி",
@@ -67,6 +76,17 @@ CATEGORIES = {
     },
 }
 
+# Skipped on purpose (see conversation): "item" and "matti" are common
+# enough as ordinary words (an item on a list, a person's name, etc.)
+# that hard-blocking them risks real false positives. "pool" is
+# excluded for the same reason (swimming pool, car pool) -- "poolu"
+# (the Tamil-specific spelling) is included above instead, since that
+# form essentially never appears in innocent English text. Free-form
+# solicitation phrases with no single flaggable word ("personal ah
+# pesalam", "video call vanga", "real meet me") aren't coverable by a
+# word blocklist at all -- see the note in extract_features/ANCHORS
+# about why closing that gap needs a different approach.
+
 # Words too generic to hard-block on their own (see conversation) —
 # excluded from CATEGORIES by default. Flip HARD_BLOCK_PM_CATEGORY to
 # True if you want them enforced identically to everything else anyway.
@@ -82,38 +102,77 @@ if HARD_BLOCK_PM_CATEGORY:
 # use of these words auto-actioned.
 # CATEGORIES["gender_reference"] = {"girls", "boys", "women", "aunty"}
 
-EMOJIS = {"🍆", "🍑", "👙", "💋", "🖕", "😘"}
+EMOJIS = set()  # emoji blocklist removed per request -- no emoji is auto-flagged anymore
 
 # --- Matching ------------------------------------------------------------
 
-_word_pattern_cache = {}
+_phrase_pattern_cache = {}
 
 
-def _compile(term):
-    if term not in _word_pattern_cache:
-        if re.search(r"[a-zA-Z]", term) and " " not in term:
-            # single latin word -> match on word boundaries
-            pat = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
-        else:
-            # phrase or non-latin script -> plain substring, case-insensitive
-            pat = re.compile(re.escape(term), re.IGNORECASE)
-        _word_pattern_cache[term] = pat
-    return _word_pattern_cache[term]
+def _phrase_pattern(term):
+    if term not in _phrase_pattern_cache:
+        _phrase_pattern_cache[term] = re.compile(re.escape(term), re.IGNORECASE)
+    return _phrase_pattern_cache[term]
+
+
+def collapse_runs(s):
+    """'pmm' -> 'pm', 'inboxx' -> 'inbox'. Same idea as trainer.py's
+    version, duplicated here on purpose to keep this module decoupled."""
+    return re.sub(r"(.)\1+", r"\1", s)
+
+
+def _strip_digits(tok):
+    """'9punda' -> 'punda', 'punda9' -> 'punda'."""
+    return re.sub(r"^\d+|\d+$", "", tok)
+
+
+def _tokenize(text):
+    return re.findall(r"[a-zA-Z0-9']+", text.lower())
+
+
+def _normalized_token_variants(text):
+    """
+    Every token in the message, plus digit-stripped and letter-collapsed
+    variants of each, so single-word terms can be matched against
+    common evasions (digit-gluing, doubled letters) without needing a
+    separate blocklist entry for every possible spelling.
+    """
+    variants = set()
+    for tok in _tokenize(text):
+        variants.add(tok)
+        stripped = _strip_digits(tok)
+        if stripped:
+            variants.add(stripped)
+        variants.add(collapse_runs(tok))
+        if stripped:
+            variants.add(collapse_runs(stripped))
+    return variants
 
 
 def check_text(text):
     """
     Returns a list of (category, matched_term) for every blocklist hit
     found in text. Empty list = clean message.
+
+    Single-word latin terms are matched against normalized token
+    variants (handles "9punda", "Pmm", "Inboxx"-style evasion).
+    Phrases and non-latin script terms are matched as plain
+    case-insensitive substrings, unchanged.
     """
     hits = []
     if not text:
         return hits
 
+    token_variants = _normalized_token_variants(text)
+
     for category, terms in CATEGORIES.items():
         for term in terms:
-            if _compile(term).search(text):
-                hits.append((category, term))
+            if re.search(r"[a-zA-Z]", term) and " " not in term:
+                if term.lower() in token_variants:
+                    hits.append((category, term))
+            else:
+                if _phrase_pattern(term).search(text):
+                    hits.append((category, term))
 
     for emoji in EMOJIS:
         if emoji in text:
