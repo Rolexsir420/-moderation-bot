@@ -57,7 +57,6 @@ CATEGORY_REASONS = [
     ("sexual", "no 18+ talk in groupchat"),
     ("tamil_sexual_slang", "no 18+ talk in groupchat"),
     ("clothing_body", "no 18+ talk in groupchat"),
-    ("emoji", "no 18+ talk in groupchat"),
     ("scam", "no scam/paid content"),
     ("service_paid", "no scam/paid content"),
     ("relationship_dating", "no dating txt"),
@@ -146,14 +145,18 @@ async def apply_dm_mute(client, chat_id, user_id, mention, reason):
 
 async def apply_blocklist_action(client, message: Message, user, mention, hits):
     """
-    Deterministic path: reply to the offending message with a short,
-    human-admin-style command (".delwarn no badwords",
-    ".delmute 60m no 18+ talk in groupchat", ".delban ..."). This
-    account does NOT delete/mute/ban directly -- the group's separate
-    admin command bot picks up the reply (it infers the target from
-    the reply-to relationship, no @mention needed) and performs the
-    actual delete + action. We only decide WHICH command to send,
-    based on our own strike escalation (warn -> mute -> ban).
+    Deterministic path: reply to the offending message with
+    ".delwarn {reason}" (e.g. ".delwarn no badwords"). This account
+    does NOT delete/mute/ban directly -- the group's separate admin
+    command bot picks up the reply (it infers the target from the
+    reply-to relationship, no @mention needed) and performs the actual
+    delete + warn.
+
+    Always .delwarn, never .delmute/.delban, for blocklist content --
+    only DM-solicitation (handled separately, see dm_cmd_text below)
+    escalates to a real mute. strikes.add_strike is still called so the
+    admin log keeps a running count per user, but the count no longer
+    changes which command gets sent.
     """
     categories = sorted({cat for cat, term in hits})
     reason = reason_for_categories(categories)
@@ -165,14 +168,8 @@ async def apply_blocklist_action(client, message: Message, user, mention, hits):
         )
         return
 
-    count, action = strikes.add_strike(user_id)
-
-    if action == "ban":
-        cmd_text = f".delban {reason}"
-    elif action == "mute":
-        cmd_text = f".delmute {config.MUTE_MINUTES}m {reason}"
-    else:
-        cmd_text = f".delwarn {reason}"
+    count, _ = strikes.add_strike(user_id)
+    cmd_text = f".delwarn {reason}"
 
     try:
         await message.reply_text(cmd_text)
