@@ -53,63 +53,290 @@
 {"text": "dei sunni dm pannu da", "warn": true, "reason": "admin_feedback: instructing someone to DM, confirmed DM-intention"}
 {"text": "any kandroli dm pannu da", "warn": true, "reason": "admin_feedback: 'kandroli' is an abusive word, confirmed warn"}
 {"text": "dm pannuga", "warn": true, "reason": "spelling_variant_of_pannunga"}
-{"text": "pm me", "warn": true, "reason": "direct_solicitation"}
-{"text": "msg me pls", "warn": true, "reason": "direct_solicitation"}
-{"text": "message pannunga", "warn": true, "reason": "direct_solicitation"}
-{"text": "dm me please", "warn": true, "reason": "direct_solicitation"}
-{"text": "p m pannuga", "warn": true, "reason": "spaced_letter_evasion"}
-{"text": "d.m pannuga", "warn": true, "reason": "punct_split_evasion"}
-{"text": "m s g me", "warn": true, "reason": "spaced_letter_evasion"}
-{"text": "any akka pm me", "warn": true, "reason": "solicitation directed at akka"}
-{"text": "ex girlfriend dm pannuga", "warn": true, "reason": "solicitation"}
-{"text": "pm ah irukka", "warn": false, "reason": "time_query_not_solicitation"}
-{"text": "enaku pm pannathinga", "warn": false, "reason": "negated"}
-{"text": "group message paaru", "warn": false, "reason": "reference_to_existing_message"}
-{"text": "9pm nu solringa", "warn": false, "reason": "time_reference"}
-{"text": "dm panra", "warn": true, "reason": "solicitation"}
-{"text": "msg pannunga bro", "warn": true, "reason": "solicitation"}
-{"text": "inbox me now", "warn": true, "reason": "solicitation"}
-{"text": "any girls dm me", "warn": true, "reason": "solicitation"}
-{"text": "single ah irundha dm pannuga", "warn": true, "reason": "solicitation"}
-{"text": "akka number kudunga dm la", "warn": true, "reason": "contact_solicitation"}
-{"text": "aunty pic anupunga dm", "warn": true, "reason": "contact_solicitation"}
-{"text": "d_m pannuga", "warn": true, "reason": "punct_split_evasion"}
-{"text": "p.m pannunga", "warn": true, "reason": "punct_split_evasion"}
-{"text": "dmm pannuga", "warn": true, "reason": "stretched_letter_evasion"}
-{"text": "pm ah class irukku", "warn": false, "reason": "time_reference"}
-{"text": "enaku msg pannadheenga", "warn": false, "reason": "negated"}
-{"text": "dm pannadha nala per", "warn": false, "reason": "negated"}
-{"text": "akka epdi irukinga", "warn": false, "reason": "presence_query"}
-{"text": "aunty va paakalaya", "warn": false, "reason": "unrelated_query"}
-{"text": "ex pathi pesama iru", "warn": false, "reason": "negated_topic"}
-{"text": "fwb nu solra pasanga silly", "warn": false, "reason": "meta_commentary"}
-{"text": "message vantha check pannuga", "warn": false, "reason": "normal_instruction"}
-{"text": "insta id dm pannuga", "warn": true, "reason": "contact_solicitation"}
-{"text": "whatsapp number pm pannuga", "warn": true, "reason": "contact_solicitation"}
-{"text": "contact tharuga dm", "warn": true, "reason": "contact_solicitation"}
-{"text": "snap id dm me", "warn": true, "reason": "contact_solicitation"}
-{"text": "interested ah irundha dm", "warn": true, "reason": "vague_bait"}
-{"text": "who is single dm me", "warn": true, "reason": "vague_bait"}
-{"text": "boys only dm pannuga", "warn": true, "reason": "vague_bait"}
-{"text": "girls dm pls", "warn": true, "reason": "vague_bait"}
-{"text": "serious ah irundha mattum dm", "warn": true, "reason": "vague_bait"}
-{"text": "ddmm pannuga", "warn": true, "reason": "letter_pair_evasion"}
-{"text": "d-m pannuga", "warn": true, "reason": "punct_split_evasion"}
-{"text": "m.s.g pannunga", "warn": true, "reason": "punct_split_evasion"}
-{"text": "dm pannuga anupunga", "warn": true, "reason": "solicitation_with_emoji_context"}
-{"text": "pm me anupunga", "warn": true, "reason": "solicitation_with_emoji_context"}
-{"text": "msg pannunga anupunga", "warn": true, "reason": "solicitation_with_emoji_context"}
-{"text": "gf venuma dm pannuga", "warn": true, "reason": "relationship_bait"}
-{"text": "bf venuma dm pannuga", "warn": true, "reason": "relationship_bait"}
-{"text": "secret ah pesanuma dm pannuga", "warn": true, "reason": "relationship_bait"}
-{"text": "dm pannadheenga scam nu solli", "warn": false, "reason": "anti_scam_warning"}
-{"text": "enaku bf venam nu solitten", "warn": false, "reason": "unrelated_statement"}
-{"text": "admin ku dm pannuga doubt irundha", "warn": false, "reason": "legitimate_admin_instruction"}
-{"text": "group la pm panra pasanga ku warning", "warn": false, "reason": "meta_discussion_about_pmers"}
-{"text": "9pm ku call pannuga", "warn": false, "reason": "time_reference"}
-{"text": "exam pathi msg pannunga teacher ku", "warn": false, "reason": "legitimate_message_request"}
-{"text": "dmmmmm pannuga", "warn": true, "reason": "stretched_letter_evasion"}
-{"text": "dmmm me", "warn": true, "reason": "stretched_letter_evasion"}
-{"text": "pmmmm pannunga", "warn": true, "reason": "stretched_letter_evasion"}
-{"text": "msggggg pannuga", "warn": true, "reason": "stretched_letter_evasion"}
-{"text": "dmmmm panra ah", "warn": true, "reason": "stretched_letter_evasion"}
+{"text": "pm me", "warn": true, "reason": "gap_fix_pm_me"}
+{"text": "text me", "warn": true, "reason": "gap_fix_new_anchor_text"}
+{"text": "txt me", "warn": true, "reason": "gap_fix_new_anchor_txt"}
+{"text": "p_m", "warn": true, "reason": "gap_fix_punct_split_pm"}
+{"text": "pmm vaanga", "warn": true, "reason": "gap_fix_letter_doubled_pm"}
+{"text": "inboxx pannuga", "warn": true, "reason": "gap_fix_letter_doubled_inbox"}
+{"text": "dm vanga", "warn": true, "reason": "gap_fix_dm_context_vanga"}
+{"text": "dm varala", "warn": true, "reason": "gap_fix_dm_context_varala"}
+{"text": "dm di", "warn": true, "reason": "gap_fix_dm_di"}
+{"text": "dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dms", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dmme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dmm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dmmm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dmmme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dmmepls", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dmva", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "directmessage", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "directmessages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "directmsg", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "directmsgs", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pms", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pmme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pmm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pmmm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pmmee", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pmva", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "add", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "added", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "addme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "add me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "addfriend", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "messages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "messageme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "message me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "msg", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "msgme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "msg me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "mes", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "mesme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "mes me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "privatemessage", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "privatemessages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private messages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "privatemsg", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "privatemsgs", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personalmessage", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personalmessages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal messages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personalmsg", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personalmsgs", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inboxes", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inboxme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ib", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ibme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ib me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "text", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "textme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "text me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ping", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pingme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ping me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "reachme", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "reach me", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "sendmessage", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "sendmessages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "send message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "sendmsg", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "send msg", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "sendpm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "senddm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "comepm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "come pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "comedm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "come dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "privatechat", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private chat", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personalchat", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal chat", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Check inbox", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dms pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku dm pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "please dm pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "direct message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "direct messages pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "direct msg pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "direct msgs pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pms pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku pm pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "add pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enna add pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "friend ah add pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "messages pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "msg pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku msg pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private ah message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private messages pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private msg pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private msgs pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal ah message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal messages pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal msg pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal msgs pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox la message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku inbox pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ib pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku ib pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "text pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku text pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ping pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enaku ping pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "enna reach pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "message anuppunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "messages anuppunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "msg anuppunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm anuppunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm anuppunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm ku vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm ku vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private ah pesunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private chat pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal chat pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Check your personal messages", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm please", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm please", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm bro", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm bro", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm sis", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm sis", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm anna", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm anna", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm akka", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm akka", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm macha", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm macha", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "come inbox", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "check dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "check pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "see dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "see pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "look dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "look pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "reply dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "reply pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "accept dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "accept pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Pm pesalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Dm pesalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Private ah pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Veliya message anupirken", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Vanga dm polam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Dm polam vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Thaniya pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Thaniya message pottruken", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Thaniya variya", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Addedddddd", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Addd pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "Added vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "reply privately", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "message privately", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "contact privately", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "va dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "va pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm ku va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm ku va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm ku vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm ku vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm la pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm la pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm la va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm la va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm la vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm la vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox la va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox la vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private la pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal ah pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal ah va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal ah vanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal message pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private message pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "msg pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "message pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "text pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "ping pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "unga dm open ah", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "unga pm open ah", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm open pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm open pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm check pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm check pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox check pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru dm pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru pm pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru message pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru msg pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru text pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru ping pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam dm vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam pm vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "secret ah pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "secret chat", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "secret ah va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "outside va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "outside pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "group ku veliya pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "group ku veliya va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private ku va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal ku va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm pannalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm pannalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm varalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm varalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm ku variya", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm ku variya", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm ku varen", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm ku varen", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "dm la varen", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm la varen", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox pannuren", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "inbox la pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private ah vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal ah vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam thaniya pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam veliya va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "group veliya va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "chat pannalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private chat pannalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal chat pannalama", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pesa variya", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pesa vaanga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam pesanum", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru nimisham dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "oru nimisham pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "urgent dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "urgent pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "important dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "important pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "important message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "urgent message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "secret message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "hidden ah pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "silent ah pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "personal matter", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "private matter", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "matter iruku dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "matter iruku pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "solanum dm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "solanum pm", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "unga kitta thaniya pesanum", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam inbox va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam private va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "konjam personal va", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "outside chat", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "veliya va pesalam", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "group ku veliya message", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "message paathutu reply pannunga", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "reply pannunga dm la", "warn": true, "reason": "bulk_dm_solicitation_dataset"}
+{"text": "pm pannuga", "warn": true, "reason": "lock_in_previously_fixed_case"}
+{"text": "mesme pannunga", "warn": true, "reason": "strengthen_mes_glued"}
+{"text": "enaku mesme pannunga", "warn": true, "reason": "strengthen_mes_glued"}
