@@ -35,7 +35,8 @@ CATEGORIES = {
         "hookup", "hookups", "fwb", "wife", "married", "darling", "baby",
         "milf", "bhabhi", "housewife", "available", "virgin",
         "couple exchange", "item irukingla", "personal ah pesalam",
-        "real meet me",
+        "real meet me", "secret ah pesalam", "secret chat",
+        "outside pesalam",
     },
     "gender_orientation": {
         "lesbian", "lesbians", "gay", "gays", "bisexual", "transgender",
@@ -54,7 +55,7 @@ CATEGORIES = {
         "ugomma",
     },
     "tamil_sexual_slang": {
-        "sunni", "junni", "jumni", "kunju", "kundi", "kundiadi", "kuthi",
+        "sunni", "sunniya", "junni", "jumni", "kunju", "kundi", "kundiadi", "kuthi",
         "sappu", "umbu", "oolu", "oomba", "nakku", "nakkuren", "poolu",
         "kai adikuren",
         # Tamil script
@@ -73,6 +74,31 @@ CATEGORIES = {
     },
     "caste_hate": {
         "keel", "jaathi",
+    },
+}
+
+# --- Prefix-matched roots -----------------------------------------------
+# Tamil grammar attaches suffixes very productively (sunniya, sunniku,
+# pundaiya, pundaikaari...), so an exact-match word list will always be
+# one suffix behind. These specific roots have essentially no legitimate
+# other meaning in casual chat, so matching ANY word that starts with
+# them (not just the exact word) is low-risk. Deliberately excludes:
+#   - "kunju" (also a common Malayalam word for "baby/little one")
+#   - English roots like "ass", "dick", "gay" (prefix-matching those
+#     would catch "assume", "Dickens", "Gaya" the Indian city, etc.)
+# "sunni" is included despite naming a real religious group (Sunni
+# Islam) -- the bare word was already an exact-match blocklist entry
+# before this, so the only NEW risk from prefix-matching it is also
+# catching "Sunnis"/"Sunnism"/"Sunnite", which is a small, known,
+# accepted tradeoff given how commonly the slang form appears in this
+# group's actual traffic.
+PREFIX_ROOTS = {
+    "tamil_abusive": {
+        "punda", "koothi", "koodhi", "oombu", "oombi", "mayiru",
+        "thevidiya", "thevudiya", "tevadiya", "munda", "vibachari",
+    },
+    "tamil_sexual_slang": {
+        "sunni", "poolu", "nakku",
     },
 }
 
@@ -157,7 +183,9 @@ def check_text(text):
     Single-word latin terms are matched against normalized token
     variants (handles "9punda", "Pmm", "Inboxx"-style evasion).
     Phrases and non-latin script terms are matched as plain
-    case-insensitive substrings, unchanged.
+    case-insensitive substrings, unchanged. PREFIX_ROOTS additionally
+    catch any word STARTING WITH a low-risk root (sunniya, pundaiya,
+    koothiku, ...) without needing every suffix enumerated.
     """
     hits = []
     if not text:
@@ -173,6 +201,13 @@ def check_text(text):
             else:
                 if _phrase_pattern(term).search(text):
                     hits.append((category, term))
+
+    for category, roots in PREFIX_ROOTS.items():
+        for tok in token_variants:
+            for root in roots:
+                if tok.startswith(root):
+                    hits.append((category, f"{root}*"))
+                    break
 
     for emoji in EMOJIS:
         if emoji in text:
