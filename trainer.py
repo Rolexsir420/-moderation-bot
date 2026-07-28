@@ -17,7 +17,11 @@ from collections import defaultdict
 
 import config
 
-ANCHORS = ["pm", "dm", "msg", "message", "inbox", "akka", "aunty", "fwb", "ex", "text", "txt"]
+ANCHORS = [
+    "pm", "dm", "msg", "message", "inbox", "akka", "aunty", "fwb", "ex",
+    "text", "txt", "add", "ping", "reach", "private", "personal", "ib",
+    "contact", "mes",
+]
 WINDOW = 4          # words to look at on either side of an anchor
 ALPHA = 1.0         # Laplace smoothing
 BIAS = "__BIAS__"   # feature representing "anchor present, regardless of context"
@@ -68,6 +72,41 @@ def collapse_runs(s):
     return re.sub(r"(.)\1+", r"\1", s)
 
 
+# Two anchors (or an anchor + a common word) typed with no space at all
+# ("dmme", "addme", "sendpm", "privatemessage") tokenize as one solid
+# word the regex tokenizer can't split automatically. Mapped here to
+# (anchor, synthetic_context_word) so they still contribute a BIAS +
+# context feature instead of being invisible to the model entirely.
+GLUED_COMPOUNDS = {
+    "dms": ("dm", None), "dmme": ("dm", "me"), "dmva": ("dm", "va"),
+    "dmmepls": ("dm", "me"),
+    "pms": ("pm", None), "pmme": ("pm", "me"), "pmva": ("pm", "va"),
+    "addme": ("add", "me"), "addfriend": ("add", "friend"),
+    "messageme": ("message", "me"), "msgme": ("msg", "me"),
+    "mesme": ("mes", "me"), "textme": ("text", "me"),
+    "pingme": ("ping", "me"), "reachme": ("reach", "me"),
+    "ibme": ("ib", "me"), "inboxme": ("inbox", "me"),
+    "sendmessage": ("message", "send"), "sendmessages": ("message", "send"),
+    "sendmsg": ("msg", "send"), "sendpm": ("pm", "send"),
+    "senddm": ("dm", "send"), "comepm": ("pm", "come"),
+    "comedm": ("dm", "come"), "added": ("add", None),
+    "directmessage": ("message", "direct"), "directmessages": ("message", "direct"),
+    "directmsg": ("msg", "direct"), "directmsgs": ("msg", "direct"),
+    "privatemessage": ("private", "message"), "privatemessages": ("private", "message"),
+    "privatemsg": ("private", "msg"), "privatemsgs": ("private", "msg"),
+    "personalmessage": ("personal", "message"), "personalmessages": ("personal", "message"),
+    "personalmsg": ("personal", "msg"), "personalmsgs": ("personal", "msg"),
+    "privatechat": ("private", "chat"), "personalchat": ("personal", "chat"),
+}
+
+# collapse_runs() flattens EVERY repeated-letter run to 1, so "dmme"
+# (2 m's) and "dmmme" (3 m's) both become "dme" -- collapsing the raw
+# GLUED_COMPOUNDS keys the same way means any repeat-count variant
+# ("dmm", "dmmm", "dmmme"...) matches through one shared lookup instead
+# of needing every count enumerated.
+_COLLAPSED_GLUED_COMPOUNDS = {collapse_runs(k): v for k, v in GLUED_COMPOUNDS.items()}
+
+
 def extract_features(text):
     """
     Returns list of (anchor, feature) pairs found in this text.
@@ -82,16 +121,23 @@ def extract_features(text):
         base = tok
         is_time_glued = False
         is_letter_doubled = False
+        glued_extra = None
 
         m = time_pattern.match(tok)
         if m:
             base = m.group(1)
             is_time_glued = True
+        elif tok in GLUED_COMPOUNDS:
+            base, glued_extra = GLUED_COMPOUNDS[tok]
         elif tok not in ANCHORS:
             collapsed = collapse_runs(tok)
             if collapsed in ANCHORS:
                 base = collapsed
                 is_letter_doubled = True
+            elif collapsed in GLUED_COMPOUNDS:
+                base, glued_extra = GLUED_COMPOUNDS[collapsed]
+            elif collapsed in _COLLAPSED_GLUED_COMPOUNDS:
+                base, glued_extra = _COLLAPSED_GLUED_COMPOUNDS[collapsed]
 
         if base in ANCHORS:
             found.append((base, BIAS))
@@ -102,6 +148,9 @@ def extract_features(text):
                 # itself correlates with warn/safe, same idea as
                 # PUNCT_SPLIT_ANCHOR below
                 found.append((base, "LETTER_DOUBLED_ANCHOR"))
+            if glued_extra:
+                found.append((base, glued_extra))
+                found.append((base, "GLUED_COMPOUND"))
             if split_flags[i]:
                 # so the model can learn from data whether this evasion
                 # pattern itself correlates with warn/safe
