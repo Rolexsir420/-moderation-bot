@@ -62,3 +62,22 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
             return m["user_id"], m["msg_id"]
 
     return None, None
+
+
+def get_recent_texts(chat_id, user_id, exclude_msg_id, n=3):
+    """
+    Returns the text of this user's last n messages in this chat
+    (most recent first), excluding exclude_msg_id (the message
+    currently being evaluated). Used only to RESCUE borderline
+    classifier calls toward safe -- e.g. a bare "pm" that's actually
+    part of an ongoing political/news conversation, not solicitation.
+    Never used to escalate a score, only to soften it.
+    """
+    buf = history.get(chat_id)
+    if not buf:
+        return []
+    recent = [
+        m["text"] for m in reversed(buf)
+        if m["user_id"] == user_id and m["msg_id"] != exclude_msg_id
+    ]
+    return recent[:n]
