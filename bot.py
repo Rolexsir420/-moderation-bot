@@ -227,6 +227,12 @@ async def handle_group_message(client, message: Message):
     anchor_present = len(detect_solicitation_wording(text)) > 0
 
     if label == "warn":
+        # Confident detection (score already cleared WARN_THRESHOLD on
+        # its own, e.g. "any akka msg me" at 3.6) -- conversation
+        # context is intentionally NOT consulted here. Diluting a
+        # confident hit with unrelated recent chatter would let real
+        # solicitation slide; context is only for rescuing the shaky,
+        # borderline cases below.
         is_abusive = True
     elif label == "uncertain" and anchor_present and total >= 0:
         # Score didn't clear WARN_THRESHOLD, but it's still net-positive
@@ -242,6 +248,35 @@ async def handle_group_message(client, message: Message):
         # Muting those was a real bug -- context words the model
         # recognized as negation/refusal were being overridden just
         # because an anchor word was technically present.
+        #
+        # BEFORE committing to a mute here, give the sender's recent
+        # messages one chance to rescue a borderline call toward safe
+        # -- e.g. bare "pm" scores positive on anchor bias alone with
+        # no other context, but if their last couple of messages were
+        # clearly about Indian politics/news, that's real evidence this
+        # isn't solicitation. This can only soften a borderline score,
+        # never escalate one -- see the "warn" branch above.
+        recent = conversation_tracker.get_recent_texts(
+            chat_id=message.chat.id, user_id=user.id if user else None,
+            exclude_msg_id=message.id, n=3,
+        )
+        if recent:
+            combined_text = " ".join(recent) + " " + text
+            combined_label, combined_total, _ = classify(combined_text, weights)
+            if combined_total < 0:
+                is_abusive = False
+                await log_to_admin(
+                    f"✅ Rescued {mention} from auto-mute (score={total:.2f} alone, "
+                    f"{combined_total:.2f} with recent context) in "
+                    f"{message.chat.title}:\n“{text}”\nrecent: {recent}"
+                )
+                conversation_tracker.record_message(
+                    chat_id=message.chat.id, msg_id=message.id,
+                    user_id=user.id if user else None,
+                    reply_to_id=message.reply_to_message_id,
+                    text=text, is_abusive=False,
+                )
+                return
         is_abusive = True
         await log_to_admin(
             f"🔇 Auto-muted {mention} (score={total:.2f}, below warn threshold "
