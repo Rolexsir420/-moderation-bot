@@ -51,6 +51,15 @@ GLUED_COMPOUNDS = {
     "addme": ("add", "me"),
 }
 
+# Common abbreviations/shorthand that mean the same thing as a full
+# anchor word, so they share that anchor's learned vocabulary instead of
+# being invisible to the classifier.
+ANCHOR_ALIASES = {
+    "pvt": "private",
+    "prvt": "private",
+    "prv": "private",
+}
+
 
 def collapse_runs(tok):
     """aaa -> a, dddd -> d (collapse any run of a repeated letter to one)."""
@@ -172,6 +181,8 @@ def extract_features(text):
             is_time_glued = True
         elif tok in ANCHORS:
             base = tok
+        elif tok in ANCHOR_ALIASES:
+            base = ANCHOR_ALIASES[tok]
         elif tok in ("pm", "am") and i > 0 and re.match(r"^\d{1,2}$", tokens[i - 1]):
             # spaced time reference: "9 pm now" treated like "9pm now"
             base = tok
