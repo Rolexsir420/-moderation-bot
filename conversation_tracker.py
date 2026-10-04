@@ -64,6 +64,25 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
     return None, None
 
 
+def get_message_text(chat_id, msg_id):
+    """
+    Returns the text of a specific message by id, if it's still in this
+    chat's rolling history, else None (e.g. it aged out of the small
+    fixed-size buffer, or was never recorded). Used to pull in what a
+    reply is actually replying TO -- e.g. Person A asks "anybody want
+    to play a game?", Person B replies "add me" -- read alone "add me"
+    is ambiguous, but combined with what it's replying to, it's clearly
+    about joining a game, not DM solicitation.
+    """
+    buf = history.get(chat_id)
+    if not buf:
+        return None
+    for m in buf:
+        if m["msg_id"] == msg_id:
+            return m["text"]
+    return None
+
+
 def get_recent_texts(chat_id, user_id, exclude_msg_id, n=3):
     """
     Returns the text of this user's last n messages in this chat
@@ -81,3 +100,48 @@ def get_recent_texts(chat_id, user_id, exclude_msg_id, n=3):
         if m["user_id"] == user_id and m["msg_id"] != exclude_msg_id
     ]
     return recent[:n]
+
+
+# --- Duplicate-message spam detection ------------------------------------
+# Separate from `history` above on purpose: `history` is a small
+# fixed-size deque (MAX_HISTORY_PER_CHAT, e.g. 50 messages) meant for the
+# short instigator-lookup window. Spam detection needs a much longer
+# (hours-long) per-user memory that a busy group would blow straight
+# through if it shared that same small buffer -- so it gets its own
+# time-pruned store instead of a fixed message count.
+#
+# (chat_id, user_id) -> list of {"text": normalized_text, "ts": ts}
+_spam_history = {}
+
+
+def _normalize_for_spam_check(text):
+    return " ".join((text or "").lower().split())
+
+
+def check_and_record_duplicate(chat_id, user_id, text):
+    """
+    Returns True if this user has already sent this EXACT same message
+    (case/whitespace-insensitive) in this chat within the last
+    config.SPAM_WINDOW_HOURS. Always records the current message for
+    future checks, regardless of the result.
+
+    Only meant for content that's otherwise clean (no blocklist hit, no
+    DM-solicitation signal) but becomes a problem purely through
+    repetition -- e.g. the same self-promo line posted every so often
+    for hours. Exact-match only, deliberately: fuzzy/near-duplicate
+    matching risks flagging people who just talk about similar topics.
+    """
+    now = time.time()
+    window = config.SPAM_WINDOW_HOURS * 3600
+    key = (chat_id, user_id)
+    entries = _spam_history.setdefault(key, [])
+
+    # prune anything older than the window
+    entries[:] = [e for e in entries if now - e["ts"] <= window]
+
+    normalized = _normalize_for_spam_check(text)
+    is_duplicate = any(e["text"] == normalized for e in entries)
+
+    entries.append({"text": normalized, "ts": now})
+
+    return is_duplicate
