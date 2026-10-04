@@ -1,18 +1,30 @@
 """
 Learns moderation decisions from labeled (text, warn) examples.
-No hardcoded word lists for akka/aunty/mela/irukingala/negation —
-the model figures out which context words push toward warn/no-warn
-around each anchor keyword, purely from the labeled data.
+No hardcoded word lists for context words (akka/aunty/mela/irukingala/
+negation etc.) — the model figures out which context words push toward
+warn/no-warn around each anchor keyword, purely from the labeled data.
+(Explicit abusive/sexual/caste words are instead handled deterministically
+by blocklist.py, which runs before this classifier ever sees the text.)
 
-Approach: per-anchor Naive-Bayes-style log-odds over context words
-found near that anchor. Each anchor (pm, dm, msg, akka, aunty, fwb...)
-gets its own vocabulary, so "irukingala" can mean something different
-next to "akka" than next to "aunty" — the data decides, not us.
+Approach: per-anchor Naive-Bayes-style log-odds over context words found
+near that anchor. Each anchor (pm, dm, msg, akka, aunty, fwb...) gets its
+own vocabulary, so "irukingala" can mean something different next to
+"akka" than next to "aunty" — the data decides, not us.
+
+Evasion handling built into extract_features():
+  - digit-glued time patterns ("9pm")
+  - spaced time patterns ("9 pm")
+  - letter-doubling / repetition collapse ("ammme" -> "me", "aaadddd" ->
+    "add" via _COLLAPSED_ANCHORS, for anchors that themselves contain a
+    natural double letter)
+  - glued compounds ("dmme" -> "dm" + "me")
+  - split-letter anchors ("d.m", "d m" -> "dm")
 """
 
 import json
 import re
 import math
+import unicodedata
 from collections import defaultdict
 
 import config
@@ -22,14 +34,84 @@ ANCHORS = [
     "text", "txt", "add", "ping", "reach", "private", "personal", "ib",
     "contact", "mes",
 ]
+
 WINDOW = 4          # words to look at on either side of an anchor
 ALPHA = 1.0         # Laplace smoothing
 BIAS = "__BIAS__"   # feature representing "anchor present, regardless of context"
+
+# Anchors glued directly onto another short word with no space
+# ("dmme" -> dm + me, "pmme" -> pm + me).
+GLUED_COMPOUNDS = {
+    "dmme": ("dm", "me"),
+    "dmmme": ("dm", "me"),
+    "pmme": ("pm", "me"),
+    "pmmee": ("pm", "me"),
+    "msgme": ("msg", "me"),
+    "textme": ("text", "me"),
+    "addme": ("add", "me"),
+}
+
+
+def collapse_runs(tok):
+    """aaa -> a, dddd -> d (collapse any run of a repeated letter to one)."""
+    return re.sub(r"(.)\1+", r"\1", tok)
+
+
+# Pre-collapsed lookup so e.g. "mmmeee" -> collapse_runs -> "me" matches a
+# glued compound even though the raw token never equals "me" or "dmme".
+_COLLAPSED_GLUED_COMPOUNDS = {}
+for _k, _v in GLUED_COMPOUNDS.items():
+    _ck = collapse_runs(_k)
+    if _ck not in _COLLAPSED_GLUED_COMPOUNDS:
+        _COLLAPSED_GLUED_COMPOUNDS[_ck] = _v
+
+# Pre-collapsed lookup for anchors that themselves contain a natural
+# double letter (e.g. "add" -> collapse_runs -> "ad"). Without this,
+# letter-repetition evasion of such anchors ("aaadddd" -> "ad") could
+# never match the anchor via the direct `collapsed in ANCHORS` check,
+# because "ad" != "add". First match wins, de-duplicated.
+_COLLAPSED_ANCHORS = {}
+for _a in ANCHORS:
+    _ca = collapse_runs(_a)
+    if _ca not in _COLLAPSED_ANCHORS:
+        _COLLAPSED_ANCHORS[_ca] = _a
+
+
+_ZERO_WIDTH_RE = re.compile(
+    "[​-‏‪-‮﻿⁠-⁤­]"
+)
+_COMBINING_RE = re.compile(r"[̀-ͯ]")
+
+
+def normalize_unicode(text):
+    """
+    Folds "fancy font" unicode (fullwidth, mathematical bold/italic,
+    circled/squared letters, etc.) and regional-indicator "flag" letters
+    back down to plain ASCII, and strips zero-width/combining characters
+    used to break a word up for evasion. Keeps the same behavior for
+    plain ASCII text — this only changes anything when stylized/unicode
+    characters are present.
+    """
+    if not text:
+        return text
+    out = []
+    for ch in text:
+        cp = ord(ch)
+        if 0x1F1E6 <= cp <= 0x1F1FF:
+            out.append(chr(ord("a") + (cp - 0x1F1E6)))
+        else:
+            out.append(ch)
+    text = "".join(out)
+    text = unicodedata.normalize("NFKC", text)
+    text = _ZERO_WIDTH_RE.sub("", text)
+    text = _COMBINING_RE.sub("", text)
+    return text
 
 
 def tokenize(text):
     # keep digits glued to letters ("9pm" stays "9pm", not stripped to "pm")
     # so the model can actually learn "digit+pm/am = time" from data
+    text = normalize_unicode(text)
     return re.findall(r"[a-zA-Z0-9']+", text.lower())
 
 
@@ -63,110 +145,81 @@ def merge_split_anchors(tokens):
     return result, flags
 
 
-def collapse_runs(s):
-    """
-    'pmm' -> 'pm', 'inboxx' -> 'inbox'. Collapses any run of 2+ identical
-    consecutive letters down to one, so doubled-letter evasion ("Pmm",
-    "Inboxx vadi") still resolves to the real anchor.
-    """
-    return re.sub(r"(.)\1+", r"\1", s)
-
-
-# Two anchors (or an anchor + a common word) typed with no space at all
-# ("dmme", "addme", "sendpm", "privatemessage") tokenize as one solid
-# word the regex tokenizer can't split automatically. Mapped here to
-# (anchor, synthetic_context_word) so they still contribute a BIAS +
-# context feature instead of being invisible to the model entirely.
-GLUED_COMPOUNDS = {
-    "dms": ("dm", None), "dmme": ("dm", "me"), "dmva": ("dm", "va"),
-    "dmmepls": ("dm", "me"),
-    "pms": ("pm", None), "pmme": ("pm", "me"), "pmva": ("pm", "va"),
-    "addme": ("add", "me"), "addfriend": ("add", "friend"),
-    "messageme": ("message", "me"), "msgme": ("msg", "me"),
-    "mesme": ("mes", "me"), "textme": ("text", "me"),
-    "pingme": ("ping", "me"), "reachme": ("reach", "me"),
-    "ibme": ("ib", "me"), "inboxme": ("inbox", "me"),
-    "sendmessage": ("message", "send"), "sendmessages": ("message", "send"),
-    "sendmsg": ("msg", "send"), "sendpm": ("pm", "send"),
-    "senddm": ("dm", "send"), "comepm": ("pm", "come"),
-    "comedm": ("dm", "come"), "added": ("add", None),
-    "directmessage": ("message", "direct"), "directmessages": ("message", "direct"),
-    "directmsg": ("msg", "direct"), "directmsgs": ("msg", "direct"),
-    "privatemessage": ("private", "message"), "privatemessages": ("private", "message"),
-    "privatemsg": ("private", "msg"), "privatemsgs": ("private", "msg"),
-    "personalmessage": ("personal", "message"), "personalmessages": ("personal", "message"),
-    "personalmsg": ("personal", "msg"), "personalmsgs": ("personal", "msg"),
-    "privatechat": ("private", "chat"), "personalchat": ("personal", "chat"),
-}
-
-# collapse_runs() flattens EVERY repeated-letter run to 1, so "dmme"
-# (2 m's) and "dmmme" (3 m's) both become "dme" -- collapsing the raw
-# GLUED_COMPOUNDS keys the same way means any repeat-count variant
-# ("dmm", "dmmm", "dmmme"...) matches through one shared lookup instead
-# of needing every count enumerated.
-_COLLAPSED_GLUED_COMPOUNDS = {collapse_runs(k): v for k, v in GLUED_COMPOUNDS.items()}
+_TIME_GLUED_RE = re.compile(r"^\d{1,2}(am|pm)$")
 
 
 def extract_features(text):
     """
     Returns list of (anchor, feature) pairs found in this text.
-    feature is either a nearby context word or BIAS.
+    feature is either a nearby context word or one of the evasion flags
+    (BIAS, DIGIT_GLUED, TIME_SPACED, PUNCT_SPLIT_ANCHOR,
+    LETTER_DOUBLED_ANCHOR, GLUED_EXTRA:<word>).
     """
     raw_tokens = tokenize(text)
     tokens, split_flags = merge_split_anchors(raw_tokens)
     found = []
-    time_pattern = re.compile(r"^\d{1,2}(am|pm)$")
 
     for i, tok in enumerate(tokens):
-        base = tok
+        base = None
         is_time_glued = False
+        is_time_spaced = False
         is_letter_doubled = False
         glued_extra = None
 
-        m = time_pattern.match(tok)
+        m = _TIME_GLUED_RE.match(tok)
         if m:
             base = m.group(1)
             is_time_glued = True
+        elif tok in ANCHORS:
+            base = tok
+        elif tok in ("pm", "am") and i > 0 and re.match(r"^\d{1,2}$", tokens[i - 1]):
+            # spaced time reference: "9 pm now" treated like "9pm now"
+            base = tok
+            is_time_spaced = True
         elif tok in GLUED_COMPOUNDS:
             base, glued_extra = GLUED_COMPOUNDS[tok]
-        elif tok not in ANCHORS:
+        else:
             collapsed = collapse_runs(tok)
             if collapsed in ANCHORS:
                 base = collapsed
+                is_letter_doubled = True
+            elif collapsed in _COLLAPSED_ANCHORS:
+                base = _COLLAPSED_ANCHORS[collapsed]
                 is_letter_doubled = True
             elif collapsed in GLUED_COMPOUNDS:
                 base, glued_extra = GLUED_COMPOUNDS[collapsed]
             elif collapsed in _COLLAPSED_GLUED_COMPOUNDS:
                 base, glued_extra = _COLLAPSED_GLUED_COMPOUNDS[collapsed]
 
-        if base in ANCHORS:
-            found.append((base, BIAS))
-            if is_time_glued:
-                found.append((base, "DIGIT_GLUED"))
-            if is_letter_doubled:
-                # so the model can learn whether this evasion pattern
-                # itself correlates with warn/safe, same idea as
-                # PUNCT_SPLIT_ANCHOR below
-                found.append((base, "LETTER_DOUBLED_ANCHOR"))
-            if glued_extra:
-                found.append((base, glued_extra))
-                found.append((base, "GLUED_COMPOUND"))
-            if split_flags[i]:
-                # so the model can learn from data whether this evasion
-                # pattern itself correlates with warn/safe
-                found.append((base, "PUNCT_SPLIT_ANCHOR"))
-            lo, hi = max(0, i - WINDOW), min(len(tokens), i + WINDOW + 1)
-            for j in range(lo, hi):
-                if j == i:
-                    continue
-                found.append((base, tokens[j]))
+        if base is None:
+            continue
+
+        found.append((base, BIAS))
+        if is_time_glued:
+            found.append((base, "DIGIT_GLUED"))
+        if is_time_spaced:
+            found.append((base, "TIME_SPACED"))
+        if is_letter_doubled:
+            found.append((base, "LETTER_DOUBLED_ANCHOR"))
+        if glued_extra:
+            found.append((base, glued_extra))
+        if split_flags[i]:
+            found.append((base, "PUNCT_SPLIT_ANCHOR"))
+
+        lo, hi = max(0, i - WINDOW), min(len(tokens), i + WINDOW + 1)
+        for j in range(lo, hi):
+            if j == i:
+                continue
+            found.append((base, tokens[j]))
+
     return found
 
 
 def load_examples(path=None):
     path = path or config.LABELED_DATA_PATH
     examples = []
-    if not __import__("os").path.exists(path):
+    import os
+    if not os.path.exists(path):
         return examples
     with open(path) as f:
         for line in f:
