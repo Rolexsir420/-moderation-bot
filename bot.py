@@ -84,15 +84,6 @@ from predict import classify, load_weights
 from feedback_loop import add_feedback
 from trainer import extract_features as detect_solicitation_wording
 
-UNCERTAIN_MUTE_MIN = getattr(config, "UNCERTAIN_MUTE_MIN", 0.5)
-
-# words that show someone is REPORTING a DM, not asking for one
-REPORTING_WORDS = {
-    "panirukan", "panirukkan", "panitan", "pannitan", "pannitu",
-    "thititu", "thittinan", "thitturan", "thittitan", "abuse", "abused",
-    "scolded", "replied", "dmd",
-}
-
 if config.SESSION_STRING:
     # Headless login (Railway) — no OTP prompt needed.
     app = Client(
@@ -268,8 +259,6 @@ async def handle_group_message(client, message: Message):
 
     label, total, hits = classify(text, weights)
     anchor_present = len(detect_solicitation_wording(text)) > 0
-    _words = set(text.lower().replace(".", " ").replace(",", " ").split())
-    reporting = bool(_words & REPORTING_WORDS)
 
     if label == "warn":
         # Confident detection (score already cleared WARN_THRESHOLD on
@@ -293,7 +282,7 @@ async def handle_group_message(client, message: Message):
             )
             return
         is_abusive = True
-    elif label == "uncertain" and anchor_present and total >= UNCERTAIN_MUTE_MIN and not reporting:
+    elif label == "uncertain" and anchor_present and total >= 0:
         # Score didn't clear WARN_THRESHOLD, but it's still net-positive
         # (leaning toward warn) AND DM-solicitation wording (pm/dm/msg/
         # akka/aunty/fwb/ex) is present. Per admin preference: auto-mute
