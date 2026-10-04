@@ -6,36 +6,27 @@ same code runs locally and on Railway without edits. Copy .env.example to
 
 import os
 
-# --- Telegram credentials (userbot: logs in as your real account, not a
-#     bot-token bot) ---
+# --- Telegram credentials (USERBOT login, not a bot token) ---
 API_ID = int(os.environ.get("API_ID", "0"))
 API_HASH = os.environ.get("API_HASH", "")
 
-# One of these two is required:
-#  - PHONE_NUMBER: used for the ONE-TIME interactive login (run
-#    generate_session.py locally, enter the OTP Telegram texts you).
-#  - SESSION_STRING: the string generate_session.py prints out after that
-#    login. Set this as a Railway env var so the bot can start headless
-#    on every redeploy without asking for an OTP again.
-PHONE_NUMBER = os.environ.get("PHONE_NUMBER", "")
+# Either SESSION_STRING (preferred for Railway) OR PHONE_NUMBER (for a local
+# interactive login that creates the session the first time) must be set.
 SESSION_STRING = os.environ.get("SESSION_STRING", "")
+PHONE_NUMBER = os.environ.get("PHONE_NUMBER", "")
 
-# Chat where the review queue, retraining confirmations, and instigator/
-# victim action logs get posted. Must be a chat/channel the bot is in.
+# Chat where review/strike/debug logs get posted. Must be a chat the
+# userbot account is a member of.
 ADMIN_CHAT_ID = int(os.environ.get("ADMIN_CHAT_ID", "0"))
 
-# --- Which group(s) to actually moderate ---
-# Comma-separated chat ids, e.g. "-1001234567890,-1009876543210".
-# Leave empty to moderate EVERY group this account is in (not
-# recommended while testing — use this to restrict to just your test
-# group). Find a group's id by sending any message in it once with
-# TARGET_CHAT_IDS empty and checking the Railway logs for
-# "[DEBUG] message from chat ...".
-_raw_target_ids = os.environ.get("TARGET_CHAT_IDS", "").strip()
-TARGET_CHAT_IDS = (
-    [int(x.strip()) for x in _raw_target_ids.split(",") if x.strip()]
-    if _raw_target_ids else []
-)
+# Comma-separated list of chat ids the bot should actually moderate.
+# Leave empty to run in "discovery mode": the bot logs every chat id it
+# sees (via [DEBUG] lines) but takes no moderation action anywhere, so you
+# can find the right id and then lock it down here.
+_raw_target_ids = os.environ.get("TARGET_CHAT_IDS", "")
+TARGET_CHAT_IDS = {
+    int(x.strip()) for x in _raw_target_ids.split(",") if x.strip()
+}
 
 # --- Persistent storage ---
 # On Railway: create a Volume, mount it at e.g. /data, and set DATA_DIR=/data.
@@ -51,17 +42,24 @@ STRIKES_PATH = os.path.join(DATA_DIR, "strikes.json")
 WARN_THRESHOLD = float(os.environ.get("WARN_THRESHOLD", "1.5"))
 SAFE_THRESHOLD = float(os.environ.get("SAFE_THRESHOLD", "-1.5"))
 
-# --- Strike escalation (used for the instigator/abuse-argument path) ---
+# --- Strike bookkeeping (admin-log only; blocklist hits never escalate the
+# command sent — they are always .delwarn, see bot.py) ---
 STRIKE_LIMIT_MUTE = int(os.environ.get("STRIKE_LIMIT_MUTE", "3"))
 STRIKE_LIMIT_BAN = int(os.environ.get("STRIKE_LIMIT_BAN", "5"))
 MUTE_MINUTES = int(os.environ.get("MUTE_MINUTES", "60"))
 
-# --- DM-intention action ---
-# When the classifier flags "warn" (DM solicitation intent), delete the
-# message and mute the sender directly for this many hours. Fixed action,
-# not escalating — no other bot needed.
+# --- DM-solicitation action ---
+# When the classifier flags DM-solicitation intent, the bot REPLIES with
+# ".delmute {DM_MUTE_HOURS}h no dm" for the other admin bot to act on.
+# The bot itself never calls restrict/ban/delete directly.
 DM_MUTE_HOURS = float(os.environ.get("DM_MUTE_HOURS", "3"))
 
-# --- Conversation / instigator tracking ---
+# --- Duplicate-message spam detection ---
+# Same exact message text from the same user within this many hours ->
+# immediate ".delmute {SPAM_MUTE_HOURS}h no spam" reply, no warn tier.
+SPAM_WINDOW_HOURS = float(os.environ.get("SPAM_WINDOW_HOURS", "8"))
+SPAM_MUTE_HOURS = float(os.environ.get("SPAM_MUTE_HOURS", "3"))
+
+# --- Conversation / instigator / reply-context tracking ---
 CONTEXT_WINDOW_SECONDS = int(os.environ.get("CONTEXT_WINDOW_SECONDS", "300"))
 MAX_HISTORY_PER_CHAT = int(os.environ.get("MAX_HISTORY_PER_CHAT", "50"))
