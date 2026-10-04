@@ -1,7 +1,13 @@
 """
-Simple persistent strike counter with escalation. One JSON file, no DB
-needed for this scale. Mount config.DATA_DIR on a Railway volume so this
-survives redeploys.
+Persistent per-user strike counts, kept purely for the admin log / audit
+trail. Since the architecture pivot to reply-only moderation, strike count
+no longer changes which command the bot sends for a blocklist hit — those
+are ALWAYS ".delwarn {reason}", never escalating to delmute/delban no
+matter how many strikes a user has. Only DM-solicitation gets a real mute
+action, and that is a fixed DM_MUTE_HOURS, not strike-based either.
+
+Kept anyway because it's useful for admins to see "this person has been
+warned N times" in the admin chat log.
 """
 
 import json
@@ -13,8 +19,11 @@ import config
 def _load():
     if not os.path.exists(config.STRIKES_PATH):
         return {}
-    with open(config.STRIKES_PATH) as f:
-        return json.load(f)
+    try:
+        with open(config.STRIKES_PATH) as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
 def _save(data):
@@ -22,25 +31,22 @@ def _save(data):
         json.dump(data, f, indent=2)
 
 
-def add_strike(user_id):
-    """Returns (new_count, action) where action is 'warn', 'mute', or 'ban'."""
+def add_strike(user_id, category=None):
+    """
+    Increments and persists the strike count for user_id. Returns the new
+    total. category is recorded for the admin log only.
+    """
     data = _load()
     key = str(user_id)
-    data[key] = data.get(key, 0) + 1
+    record = data.get(key, {"count": 0, "categories": {}})
+    record["count"] += 1
+    if category:
+        record["categories"][category] = record["categories"].get(category, 0) + 1
+    data[key] = record
     _save(data)
-    count = data[key]
-    if count >= config.STRIKE_LIMIT_BAN:
-        return count, "ban"
-    if count >= config.STRIKE_LIMIT_MUTE:
-        return count, "mute"
-    return count, "warn"
+    return record["count"]
 
 
 def get_strikes(user_id):
-    return _load().get(str(user_id), 0)
-
-
-def reset_strikes(user_id):
     data = _load()
-    data.pop(str(user_id), None)
-    _save(data)
+    return data.get(str(user_id), {"count": 0, "categories": {}})
