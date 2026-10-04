@@ -127,6 +127,40 @@ async def log_to_admin(text):
             print(f"[ERROR] log_to_admin send_message failed: {type(e).__name__}: {e}")
 
 
+async def try_reply_context_rescue(client, message, text):
+    """
+    If this message is a reply to another message, check whether
+    combining that PARENT message's text with this one flips the score
+    toward safe. A reply target is much stronger evidence of intent
+    than the sender's own unrelated recent chatter -- e.g. "ok add me"
+    scores as a CONFIDENT solicitation entirely on its own, but as a
+    reply to "Game varingala? anybody" (someone asking if anyone wants
+    to join a game) the real meaning is obvious: joining the game, not
+    asking to be privately added.
+
+    Unlike the sender's-own-history rescue below (which is scoped to
+    borderline "uncertain" scores only), this is deliberately allowed
+    to rescue even a confident "warn" label -- a direct reply carries
+    much stronger, more specific context than random recent messages,
+    so it's trusted more.
+
+    Returns (rescued: bool, parent_text: str | None).
+    """
+    if not message.reply_to_message_id:
+        return False, None
+    try:
+        parent = await client.get_messages(message.chat.id, message.reply_to_message_id)
+        parent_text = (getattr(parent, "text", None) or getattr(parent, "caption", None) or "")
+    except Exception as e:
+        print(f"[ERROR] try_reply_context_rescue get_messages failed: {type(e).__name__}: {e}")
+        return False, None
+    if not parent_text:
+        return False, None
+    combined_text = parent_text + " " + text
+    combined_label, combined_total, _ = classify(combined_text, weights)
+    return combined_total < 0, parent_text
+
+
 async def apply_dm_mute(client, chat_id, user_id, mention, reason):
     """
     Logs a DM-intention detection to the admin chat. The actual
@@ -228,11 +262,25 @@ async def handle_group_message(client, message: Message):
 
     if label == "warn":
         # Confident detection (score already cleared WARN_THRESHOLD on
-        # its own, e.g. "any akka msg me" at 3.6) -- conversation
-        # context is intentionally NOT consulted here. Diluting a
-        # confident hit with unrelated recent chatter would let real
-        # solicitation slide; context is only for rescuing the shaky,
-        # borderline cases below.
+        # its own, e.g. "any akka msg me" at 3.6). Unrelated recent
+        # chatter is NOT consulted here -- but a direct REPLY to
+        # another message is much stronger, specific context, so that
+        # one exception is checked (see try_reply_context_rescue).
+        rescued, parent_text = await try_reply_context_rescue(client, message, text)
+        if rescued:
+            is_abusive = False
+            await log_to_admin(
+                f"✅ Rescued {mention} from confident warn (score={total:.2f}) "
+                f"by reply context in {message.chat.title}\n"
+                f"parent msg: “{parent_text}”\nreply: “{text}”"
+            )
+            conversation_tracker.record_message(
+                chat_id=message.chat.id, msg_id=message.id,
+                user_id=user.id if user else None,
+                reply_to_id=message.reply_to_message_id,
+                text=text, is_abusive=False,
+            )
+            return
         is_abusive = True
     elif label == "uncertain" and anchor_present and total >= 0:
         # Score didn't clear WARN_THRESHOLD, but it's still net-positive
@@ -249,13 +297,64 @@ async def handle_group_message(client, message: Message):
         # recognized as negation/refusal were being overridden just
         # because an anchor word was technically present.
         #
+        # GATE: every anchor's own bias is positive on its own (that's
+        # unavoidable -- "pm"/"dm" alone are meant to be suspicious).
+        # But a bias-only score (no other word in the message recognized
+        # by the model at all) defaulting to mute is fine for a short,
+        # direct message like "pm" or "dm" -- it's NOT fine for a long,
+        # otherwise-unrelated sentence that just happens to contain the
+        # word "message"/"inbox"/"private"/"msg" once ("I remove that
+        # msg only since he is active member" was a real false positive
+        # from exactly this). So: bias-only scores only get to
+        # auto-mute when the message is short (<=3 words); longer
+        # messages need at least one actual recognized context word
+        # (positive or negative) supporting the score, not just the
+        # anchor's bare presence, before we'll act on it.
+        word_count = len(text.split())
+        has_real_context = any(feat != "__BIAS__" for _, feat, _ in hits)
+        if word_count > 3 and not has_real_context:
+            is_abusive = False
+            conversation_tracker.record_message(
+                chat_id=message.chat.id, msg_id=message.id,
+                user_id=user.id if user else None,
+                reply_to_id=message.reply_to_message_id,
+                text=text, is_abusive=False,
+            )
+            return
+
+        # BEFORE committing to a mute here, first try the strongest
+        # available signal: if this is a reply, does the parent
+        # message's content flip it safe? (Same mechanism as the
+        # "warn" branch above.) Only fall back to the sender's own
+        # recent chatter if this isn't a reply, or the reply-context
+        # check didn't rescue it.
+        rescued, parent_text = await try_reply_context_rescue(client, message, text)
+        if rescued:
+            is_abusive = False
+            await log_to_admin(
+                f"✅ Rescued {mention} from auto-mute (score={total:.2f}) "
+                f"by reply context in {message.chat.title}\n"
+                f"parent msg: “{parent_text}”\nreply: “{text}”"
+            )
+            conversation_tracker.record_message(
+                chat_id=message.chat.id, msg_id=message.id,
+                user_id=user.id if user else None,
+                reply_to_id=message.reply_to_message_id,
+                text=text, is_abusive=False,
+            )
+            return
+
         # BEFORE committing to a mute here, give the sender's recent
         # messages one chance to rescue a borderline call toward safe
         # -- e.g. bare "pm" scores positive on anchor bias alone with
         # no other context, but if their last couple of messages were
         # clearly about Indian politics/news, that's real evidence this
         # isn't solicitation. This can only soften a borderline score,
-        # never escalate one -- see the "warn" branch above.
+        # never escalate one -- see the "warn" branch above. (The
+        # reply-to-parent check above already handles the stronger
+        # "replying to a specific message" case; this is the fallback
+        # for messages that aren't a reply at all, or weren't rescued
+        # by their parent's content.)
         recent = conversation_tracker.get_recent_texts(
             chat_id=message.chat.id, user_id=user.id if user else None,
             exclude_msg_id=message.id, n=3,
@@ -285,7 +384,33 @@ async def handle_group_message(client, message: Message):
         )
     else:
         # label == "safe", or "uncertain" with no anchor, or "uncertain"
-        # with an anchor but a safe-leaning (negative) score -- no action.
+        # with an anchor but a safe-leaning (negative) score -- this
+        # message has no blocklist hit and no DM-solicitation signal.
+        # Before letting it through, check whether it's the same exact
+        # message this user already sent within the spam window (e.g.
+        # the same self-promo line posted repeatedly for hours) --
+        # otherwise-clean content that's still a problem purely through
+        # repetition. Immediate mute, no warn tier, no strike ladder.
+        is_duplicate = conversation_tracker.check_and_record_duplicate(
+            chat_id=message.chat.id, user_id=user.id if user else None, text=text,
+        )
+        if is_duplicate:
+            spam_cmd_text = f".delmute {format_duration(config.SPAM_MUTE_HOURS)}h no spam"
+            try:
+                await message.reply_text(spam_cmd_text)
+            except RPCError as e:
+                print(f"[ERROR] spam reply_text failed: {type(e).__name__}: {e}")
+            await log_to_admin(
+                f"{spam_cmd_text} — {mention}, repeated identical message within "
+                f"{config.SPAM_WINDOW_HOURS}h in {message.chat.title}:\n“{text}”"
+            )
+            conversation_tracker.record_message(
+                chat_id=message.chat.id, msg_id=message.id,
+                user_id=user.id if user else None,
+                reply_to_id=message.reply_to_message_id,
+                text=text, is_abusive=True,
+            )
+            return
         is_abusive = False
 
     # record into the rolling window regardless of label, so future
