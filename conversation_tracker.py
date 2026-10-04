@@ -1,21 +1,33 @@
 """
-Keeps a short rolling window of recent messages per chat so we can
-reconstruct 'who started it' when a message gets flagged as abusive.
+Keeps short-term memory of recent messages per chat, for three purposes:
 
-This layer is deterministic (reply chains and timestamps aren't guesses) —
-but it is only as good as the upstream classifier deciding is_abusive.
-If the instigator's opening message wasn't flagged, this can't reach back
-to protect the person who was baited. Keep victim-side actions soft
-(delete + note, no strike) and always log both sides to the admin chat.
+1. find_instigator — reconstruct "who started it" when a message gets
+   flagged as abusive, so a victim replying to an earlier abusive message
+   isn't the one who gets actioned.
+2. get_recent_texts — a sender's own recent messages, used ONLY to soften
+   a borderline score toward safe (never to escalate), e.g. someone
+   clearly mid-conversation about something unrelated.
+3. check_and_record_duplicate — flood/spam detection: the same exact
+   message text from the same user within SPAM_WINDOW_HOURS.
+
+This layer is deterministic (reply chains, timestamps, and exact-text
+matches aren't guesses) — but (1) and (2) are only as good as the upstream
+classifier's is_abusive decision for earlier messages in the window.
 """
 
 from collections import deque
+import re
 import time
 
 import config
 
-# chat_id -> deque of message records
+# chat_id -> deque of message records (small, fixed-size, short-term)
 history = {}
+
+# (chat_id, user_id) -> list of (normalized_text, timestamp), pruned by
+# SPAM_WINDOW_HOURS. Separate from `history` because spam detection needs
+# hours-long per-user memory, not just the last N messages in the chat.
+_spam_history = {}
 
 
 def record_message(chat_id, msg_id, user_id, reply_to_id, text, is_abusive):
@@ -34,9 +46,9 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
     """
     Given a flagged message from target_user_id, check whether it's a
     reply/reaction to an earlier abusive message directed at them.
-    Returns (instigator_user_id, instigator_msg_id) if found, else
-    (None, None) (meaning target_user_id is the first abusive message
-    in this thread, as far as we can tell from the recent window).
+    Returns (instigator_user_id, instigator_msg_id), or (None, None) if
+    target_user_id appears to be the first abusive message in this
+    thread, as far as we can tell from the recent window.
     """
     buf = history.get(chat_id)
     if not buf:
@@ -64,84 +76,60 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
     return None, None
 
 
-def get_message_text(chat_id, msg_id):
+def get_recent_texts(chat_id, user_id, exclude_msg_id=None, n=3):
     """
-    Returns the text of a specific message by id, if it's still in this
-    chat's rolling history, else None (e.g. it aged out of the small
-    fixed-size buffer, or was never recorded). Used to pull in what a
-    reply is actually replying TO -- e.g. Person A asks "anybody want
-    to play a game?", Person B replies "add me" -- read alone "add me"
-    is ambiguous, but combined with what it's replying to, it's clearly
-    about joining a game, not DM solicitation.
-    """
-    buf = history.get(chat_id)
-    if not buf:
-        return None
-    for m in buf:
-        if m["msg_id"] == msg_id:
-            return m["text"]
-    return None
-
-
-def get_recent_texts(chat_id, user_id, exclude_msg_id, n=3):
-    """
-    Returns the text of this user's last n messages in this chat
-    (most recent first), excluding exclude_msg_id (the message
-    currently being evaluated). Used only to RESCUE borderline
-    classifier calls toward safe -- e.g. a bare "pm" that's actually
-    part of an ongoing political/news conversation, not solicitation.
-    Never used to escalate a score, only to soften it.
+    Returns up to n of this sender's own most recent message texts in
+    this chat (most recent first), excluding exclude_msg_id. Used only to
+    RESCUE a borderline score toward safe — never to push toward warn.
     """
     buf = history.get(chat_id)
     if not buf:
         return []
-    recent = [
-        m["text"] for m in reversed(buf)
-        if m["user_id"] == user_id and m["msg_id"] != exclude_msg_id
-    ]
-    return recent[:n]
+    out = []
+    for m in reversed(buf):
+        if m["user_id"] != user_id:
+            continue
+        if exclude_msg_id is not None and m["msg_id"] == exclude_msg_id:
+            continue
+        out.append(m["text"])
+        if len(out) >= n:
+            break
+    return out
 
 
-# --- Duplicate-message spam detection ------------------------------------
-# Separate from `history` above on purpose: `history` is a small
-# fixed-size deque (MAX_HISTORY_PER_CHAT, e.g. 50 messages) meant for the
-# short instigator-lookup window. Spam detection needs a much longer
-# (hours-long) per-user memory that a busy group would blow straight
-# through if it shared that same small buffer -- so it gets its own
-# time-pruned store instead of a fixed message count.
-#
-# (chat_id, user_id) -> list of {"text": normalized_text, "ts": ts}
-_spam_history = {}
+_WS_RE = re.compile(r"\s+")
 
 
 def _normalize_for_spam_check(text):
-    return " ".join((text or "").lower().split())
+    return _WS_RE.sub(" ", (text or "").strip().lower())
 
 
 def check_and_record_duplicate(chat_id, user_id, text):
     """
-    Returns True if this user has already sent this EXACT same message
-    (case/whitespace-insensitive) in this chat within the last
-    config.SPAM_WINDOW_HOURS. Always records the current message for
-    future checks, regardless of the result.
+    Returns True if this exact (normalized) text was already sent by this
+    same user in this chat within SPAM_WINDOW_HOURS. Always records the
+    current message afterward (whether or not it was a duplicate), so the
+    window keeps sliding forward.
 
-    Only meant for content that's otherwise clean (no blocklist hit, no
-    DM-solicitation signal) but becomes a problem purely through
-    repetition -- e.g. the same self-promo line posted every so often
-    for hours. Exact-match only, deliberately: fuzzy/near-duplicate
-    matching risks flagging people who just talk about similar topics.
+    Exact-match only, deliberately no fuzzy matching, to avoid false
+    positives on messages that are merely similar in topic.
     """
-    now = time.time()
-    window = config.SPAM_WINDOW_HOURS * 3600
-    key = (chat_id, user_id)
-    entries = _spam_history.setdefault(key, [])
-
-    # prune anything older than the window
-    entries[:] = [e for e in entries if now - e["ts"] <= window]
+    if user_id is None:
+        return False
 
     normalized = _normalize_for_spam_check(text)
-    is_duplicate = any(e["text"] == normalized for e in entries)
+    if not normalized:
+        return False
 
-    entries.append({"text": normalized, "ts": now})
+    key = (chat_id, user_id)
+    now = time.time()
+    window_seconds = config.SPAM_WINDOW_HOURS * 3600
+
+    entries = _spam_history.setdefault(key, [])
+    # prune anything outside the window
+    entries[:] = [(t, ts) for (t, ts) in entries if now - ts <= window_seconds]
+
+    is_duplicate = any(t == normalized for (t, ts) in entries)
+    entries.append((normalized, now))
 
     return is_duplicate
