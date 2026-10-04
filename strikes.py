@@ -31,6 +31,24 @@ def _save(data):
         json.dump(data, f, indent=2)
 
 
+def _coerce_record(raw):
+    """
+    Older strikes.json files on the Volume stored a plain int per user
+    ({"user_id": 3}) instead of today's {"count": 3, "categories": {...}}.
+    Reading an old-format value straight in would crash on
+    record["count"] += 1 ('int' object is not subscriptable). Migrate it
+    transparently the first time we see it, instead of requiring a manual
+    wipe of strikes.json.
+    """
+    if isinstance(raw, dict):
+        raw.setdefault("count", 0)
+        raw.setdefault("categories", {})
+        return raw
+    if isinstance(raw, (int, float)):
+        return {"count": int(raw), "categories": {}}
+    return {"count": 0, "categories": {}}
+
+
 def add_strike(user_id, category=None):
     """
     Increments and persists the strike count for user_id. Returns the new
@@ -38,7 +56,7 @@ def add_strike(user_id, category=None):
     """
     data = _load()
     key = str(user_id)
-    record = data.get(key, {"count": 0, "categories": {}})
+    record = _coerce_record(data.get(key, {"count": 0, "categories": {}}))
     record["count"] += 1
     if category:
         record["categories"][category] = record["categories"].get(category, 0) + 1
@@ -49,4 +67,4 @@ def add_strike(user_id, category=None):
 
 def get_strikes(user_id):
     data = _load()
-    return data.get(str(user_id), {"count": 0, "categories": {}})
+    return _coerce_record(data.get(str(user_id), {"count": 0, "categories": {}}))
