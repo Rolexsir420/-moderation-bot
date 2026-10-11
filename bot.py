@@ -145,13 +145,19 @@ async def apply_blocklist_action(client, message, categories, user_id):
         )
 
 
-async def try_reply_context_rescue(client, message, text):
+async def try_reply_context_rescue(client, message, text, original_total):
     """
     If this message is a reply to another message, fetch that parent
     message and re-classify the COMBINED text (parent + this message).
-    If the combined score drops below 0, the parent supplies real
-    context that this message alone was missing (e.g. replying "add me"
-    to "anybody want to join the game?") — rescue it to safe.
+
+    Rescue to safe if the parent text genuinely helps — the combined
+    score has to drop from the standalone score (not stay flat or rise),
+    AND land clearly below a confident-warn level. Requiring a strict
+    drop below 0 was too strict in practice: "Game vaanga" + "Add me"
+    (a reply to a game invite) dropped from 0.28 to 0.05 — real context
+    that should rescue it, but 0.05 isn't "< 0". A relative threshold
+    (dropped, and now well under WARN_THRESHOLD) catches that case
+    without needing a combined score that goes fully negative.
 
     Can rescue even a confident "warn" label, not just borderline ones,
     because the parent message is ground truth context, not a guess.
@@ -170,7 +176,11 @@ async def try_reply_context_rescue(client, message, text):
 
     combined_text = parent_text + " " + text
     _combined_label, combined_total, _combined_hits = classify(combined_text, weights)
-    return combined_total < 0, parent_text
+    rescued = (
+        combined_total < original_total
+        and combined_total < (config.WARN_THRESHOLD * 0.5)
+    )
+    return rescued, parent_text
 
 
 @app.on_message(filters.group & filters.text & ~filters.bot)
@@ -223,7 +233,7 @@ async def handle_group_message(client, message: Message):
     should_mute = False
 
     if label == "warn":
-        rescued, _parent_text = await try_reply_context_rescue(client, message, text)
+        rescued, _parent_text = await try_reply_context_rescue(client, message, text, total)
         if not rescued:
             should_mute = True
     elif label == "uncertain" and anchor_present and total >= 0:
@@ -233,7 +243,7 @@ async def handle_group_message(client, message: Message):
         if word_count > 3 and not has_real_context:
             should_mute = False
         else:
-            rescued, _parent_text = await try_reply_context_rescue(client, message, text)
+            rescued, _parent_text = await try_reply_context_rescue(client, message, text, total)
             if rescued:
                 should_mute = False
             else:
@@ -251,6 +261,22 @@ async def handle_group_message(client, message: Message):
                         rescued_by_history = True
                         break
                 should_mute = not rescued_by_history
+    elif (
+        anchor_present
+        and not has_real_context
+        and word_count <= 2
+        and message.reply_to_message_id
+    ):
+        # A bare anchor word used only as a reply/tag ("add", "pm") with
+        # no other context of its own, AND the base score wasn't even
+        # borderline-positive (the branch above only fires for total >=
+        # 0) — e.g. replying to a plain "hi" with just "add". There's no
+        # legitimate reason visible anywhere for this, so default to
+        # mute UNLESS the parent message it's replying to supplies real,
+        # unrelated context (a grocery list, a game invite, an admin
+        # emergency, etc.) that genuinely explains it.
+        rescued, _parent_text = await try_reply_context_rescue(client, message, text, total)
+        should_mute = not rescued
 
     if should_mute:
         cmd_text = f".delmute {format_duration(config.DM_MUTE_HOURS)}h no dm"
