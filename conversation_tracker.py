@@ -104,21 +104,48 @@ def _normalize_for_spam_check(text):
     return _WS_RE.sub(" ", (text or "").strip().lower())
 
 
+# Ordinary chit-chat that naturally repeats many times a day in any
+# friend group and should never be treated as flood/spam, however many
+# times it's sent. Checked after normalization (lowercased, whitespace
+# collapsed), so "Hi", "HI", "hi  " all match "hi".
+COMMON_FILLERS = {
+    "hi", "hii", "hiii", "hello", "hey", "heyy",
+    "saaptiya", "saaptingala", "saapten", "saapten da",
+    "nalla iruken", "nalla irukken", "nalla irukka",
+    "mm", "mmm", "mmmm", "hmm", "hmmm",
+    "ok", "okay", "k", "kk",
+    "vanakkam", "bye", "byee", "gm", "gn",
+    "good morning", "good night", "good afternoon",
+    "thanks", "thank you", "tq", "thx",
+    "yes", "no", "ya", "yeah", "nope",
+    "super", "nice", "lol", "haha", "hahaha",
+}
+
+
 def check_and_record_duplicate(chat_id, user_id, text):
     """
-    Returns True if this exact (normalized) text was already sent by this
-    same user in this chat within SPAM_WINDOW_HOURS. Always records the
-    current message afterward (whether or not it was a duplicate), so the
-    window keeps sliding forward.
+    Returns True once this exact (normalized) text has been sent by this
+    same user in this chat at least SPAM_REPEAT_THRESHOLD times within
+    SPAM_WINDOW_HOURS (counting the current message). Always records the
+    current message afterward (whether or not the threshold was hit yet),
+    so the window keeps sliding forward.
 
-    Exact-match only, deliberately no fuzzy matching, to avoid false
-    positives on messages that are merely similar in topic.
+    Two deliberate limits on what counts as spam:
+      - exact-match only, no fuzzy matching, to avoid false positives on
+        messages that are merely similar in topic.
+      - a single word, or a common greeting/filler phrase (COMMON_FILLERS
+        above), never counts as spam no matter how many times it repeats
+        — ordinary chat is full of people saying "hi"/"ok"/"mm" a dozen
+        times a day, that's not flooding.
     """
     if user_id is None:
         return False
 
     normalized = _normalize_for_spam_check(text)
     if not normalized:
+        return False
+
+    if len(normalized.split()) <= 1 or normalized in COMMON_FILLERS:
         return False
 
     key = (chat_id, user_id)
@@ -129,7 +156,8 @@ def check_and_record_duplicate(chat_id, user_id, text):
     # prune anything outside the window
     entries[:] = [(t, ts) for (t, ts) in entries if now - ts <= window_seconds]
 
-    is_duplicate = any(t == normalized for (t, ts) in entries)
+    matching_count = sum(1 for (t, ts) in entries if t == normalized)
     entries.append((normalized, now))
 
-    return is_duplicate
+    # +1 to count the current message itself, not just prior occurrences
+    return (matching_count + 1) >= config.SPAM_REPEAT_THRESHOLD
