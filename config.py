@@ -55,10 +55,22 @@ MUTE_MINUTES = int(os.environ.get("MUTE_MINUTES", "60"))
 DM_MUTE_HOURS = float(os.environ.get("DM_MUTE_HOURS", "3"))
 
 # --- Duplicate-message spam detection ---
-# Same exact message text from the same user within this many hours ->
-# immediate ".delmute {SPAM_MUTE_HOURS}h no spam" reply, no warn tier.
-SPAM_WINDOW_HOURS = float(os.environ.get("SPAM_WINDOW_HOURS", "8"))
+# Same exact message text from the same user, repeated at least
+# SPAM_REPEAT_THRESHOLD times within SPAM_WINDOW_HOURS hours ->
+# ".delmute {SPAM_MUTE_HOURS}h no spam" reply, no warn tier. Raised from
+# "any 2nd repeat" to "8-10 repeats" per explicit request — ordinary
+# chit-chat (greetings, short replies) naturally repeats throughout the
+# day and shouldn't be treated as flood/spam on the 2nd occurrence.
+#
+# Window widened from 8h to a full day (24h): this is specifically for
+# the SLOW-drip spam pattern (same recruitment/ad message reposted with
+# ~1 hour gaps across a whole day) that a short rapid-fire flood filter
+# wouldn't catch. Fast repeat-within-minutes flooding is already handled
+# by the group's separate admin/help bot — this is a second, independent
+# net for the slower pattern, not a replacement for that one.
+SPAM_WINDOW_HOURS = float(os.environ.get("SPAM_WINDOW_HOURS", "24"))
 SPAM_MUTE_HOURS = float(os.environ.get("SPAM_MUTE_HOURS", "3"))
+SPAM_REPEAT_THRESHOLD = int(os.environ.get("SPAM_REPEAT_THRESHOLD", "8"))
 
 # --- Conversation / instigator / reply-context tracking ---
 CONTEXT_WINDOW_SECONDS = int(os.environ.get("CONTEXT_WINDOW_SECONDS", "300"))
