@@ -225,6 +225,48 @@ _SENSE_RULES = {
 # "me" in English/Tanglish; compared after letter-run collapse ("meee"->"me")
 _SELF_WORDS = {"me", "ena", "enai", "enaya", "enaiyum", "enayum", "yenai", "yena"}
 
+# "come / let's talk / do it" words. Right next to pvt/private/personal/pm
+# they make it a DM ask ("pvt vaa", "private pesalam", "pm vaanga") even if
+# the message, or someone's message just before it, mentions a company.
+# Compared after letter-run collapse, so "vaaa"->"va", "pesalaam"->"pesalam".
+_REQUEST_WORDS = {
+    "va", "vanga", "vange", "vaga", "varia", "variya", "varingala", "varuvingala",
+    "pesalam", "pesalama", "pesulam", "pesulama", "pesu", "pesunga",
+    "chat", "come", "cm", "pannu", "panu", "pannunga", "panunga", "pannuga",
+    "panuga", "pannuge", "pannunge", "msg", "dm", "pm", "ib", "text",
+}
+
+# which neighbours cancel each anchor's sense rule
+_SENSE_GUARDS = {
+    "private": _SELF_WORDS | _REQUEST_WORDS,
+    "personal": _SELF_WORDS | _REQUEST_WORDS,
+    "pm": _SELF_WORDS | _REQUEST_WORDS,
+    # "ticket add pannunga" is a normal request, so only "me" guards add
+    "add": _SELF_WORDS,
+}
+
+
+def is_direct_ask(text):
+    """
+    True if the message itself directly asks for a private chat: a
+    pvt/private/personal/pm anchor right next to a come/talk/me word
+    ("Pvt vaa", "pm vaanga", "private pesalam", "pvt enna"). bot.py uses
+    this to refuse context rescues for such messages, so posting "Pvt vaa"
+    right after someone mentions their pvt company can't slip through.
+    ("add" is not included: "Add me" replying to a game invite is a
+    legitimate rescue case.)
+    """
+    tokens, _ = merge_split_anchors(tokenize(text))
+    for i, tok in enumerate(tokens):
+        base = ANCHOR_ALIASES.get(tok, tok)
+        if base not in ("private", "personal", "pm"):
+            continue
+        guards = _SENSE_GUARDS[base]
+        for j in (i - 1, i + 1):
+            if 0 <= j < len(tokens) and collapse_runs(tokens[j]) in guards:
+                return True
+    return False
+
 
 def _has_sense(tokens, sense_words):
     """
@@ -299,11 +341,13 @@ def extract_features(text):
         ):
             continue
         # non-chat word sense present anywhere in the message -> skip
-        # ...unless the anchor is aimed at the sender themself ("add me",
-        # "pvt enna"), which is a DM ask whatever else the message says.
+        # ...unless the anchor is aimed at the sender ("add me", "pvt enna")
+        # or sits next to a come/talk word ("pvt vaa", "private pesalam"):
+        # that's a DM ask whatever else the message says.
         sense_words = _SENSE_RULES.get(base)
+        guards = _SENSE_GUARDS.get(base, _SELF_WORDS)
         aimed_at_me = glued_extra == "me" or any(
-            collapse_runs(tokens[j]) in _SELF_WORDS
+            collapse_runs(tokens[j]) in guards
             for j in (i - 1, i + 1) if 0 <= j < len(tokens)
         )
         if sense_words and not aimed_at_me and _has_sense(token_set, sense_words):
