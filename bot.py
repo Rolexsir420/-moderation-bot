@@ -43,7 +43,7 @@ import blocklist
 import conversation_tracker
 import strikes
 from predict import classify, load_weights
-from trainer import is_direct_ask
+from trainer import is_direct_ask, parent_explains
 
 weights = load_weights()
 
@@ -178,6 +178,10 @@ async def try_reply_context_rescue(client, message, text, original_total):
         return False, None
     if not parent_text:
         return False, None
+    if parent_explains(parent_text, text):
+        # "Game vaanga" <- "Add me": the parent gives "add" its ordinary
+        # meaning (a game/team/list/ticket), so the reply is answering it.
+        return True, parent_text
 
     combined_text = parent_text + " " + text
     _combined_label, combined_total, _combined_hits = classify(combined_text, weights)
