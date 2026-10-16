@@ -246,6 +246,68 @@ _SENSE_GUARDS = {
 }
 
 
+# --- Tanglish helper file (tanglish.json, next to this file) -------------
+# Plain word lists the group admin can edit without touching code:
+#   spellings   - many spellings -> one word ("panugaa" -> "pannunga")
+#   tags        - meaning signals (REQUEST / PAST / NEG / TARGET / ASK_AROUND)
+#   sense_rules, self_words, request_words - override the built-in lists
+#                 above. If the file is missing or broken, the built-in
+#                 lists are used and spellings/tags are simply off.
+# All matching is done after collapse_runs, so stretched letters
+# ("vaaangaaa") match their listed spelling automatically.
+_CANON = {}       # collapsed spelling -> canonical word
+_TAG_OF = {}      # collapsed word -> tag name
+TANGLISH_LOADED = False
+
+
+def _load_tanglish():
+    global _SENSE_RULES, _SELF_WORDS, _REQUEST_WORDS, _SENSE_GUARDS, TANGLISH_LOADED
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tanglish.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            lex = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"[WARN] tanglish.json not loaded ({type(e).__name__}: {e}); using built-in lists")
+        return
+    for canon, spellings in lex.get("spellings", {}).items():
+        for s in spellings + [canon]:
+            _CANON[collapse_runs(s.lower())] = canon.lower()
+    for tag, words in lex.get("tags", {}).items():
+        for w in words:
+            c = collapse_runs(w.lower())
+            _TAG_OF.setdefault(_CANON.get(c, c), tag)
+            _TAG_OF.setdefault(c, tag)
+    if "sense_rules" in lex:
+        _SENSE_RULES = {k: {w.lower() for w in v} for k, v in lex["sense_rules"].items()}
+    if "self_words" in lex:
+        _SELF_WORDS = {collapse_runs(w.lower()) for w in lex["self_words"]}
+    if "request_words" in lex:
+        _REQUEST_WORDS = {collapse_runs(w.lower()) for w in lex["request_words"]}
+    _SENSE_GUARDS = {
+        "private": _SELF_WORDS | _REQUEST_WORDS,
+        "personal": _SELF_WORDS | _REQUEST_WORDS,
+        "pm": _SELF_WORDS | _REQUEST_WORDS,
+        "add": _SELF_WORDS,
+    }
+    TANGLISH_LOADED = True
+
+
+_load_tanglish()
+
+
+def canonical(tok):
+    """'panugaa' -> 'pannunga' via tanglish.json; anchors are never changed."""
+    if tok in ANCHORS or tok in ANCHOR_ALIASES or tok in GLUED_COMPOUNDS:
+        return tok
+    return _CANON.get(collapse_runs(tok), tok)
+
+
+def tag_of(tok):
+    """Meaning tag for a (canonical) token, or None."""
+    return _TAG_OF.get(tok) or _TAG_OF.get(collapse_runs(tok))
+
+
 def is_direct_ask(text):
     """
     True if the message itself directly asks for a private chat: a
@@ -265,6 +327,32 @@ def is_direct_ask(text):
         for j in (i - 1, i + 1):
             if 0 <= j < len(tokens) and collapse_runs(tokens[j]) in guards:
                 return True
+    return False
+
+
+def parent_explains(parent_text, text):
+    """
+    Conversation rule for REPLIES: True if the message being replied to
+    gives the reply's anchor its ordinary meaning.
+      "Game vaanga"        <- "Add me"        (add to the game)
+      "list la add pannu"  <- "add pannitan"  (added to the list)
+      "pvt or govt?"       <- "pvt la"        (private company)
+    The parent's sense words count even if the reply says "me" — the
+    reply is answering an invite. Direct asks ("Pvt vaa") never qualify.
+    """
+    if not parent_text or is_direct_ask(text):
+        return False
+    parent_tokens = set(tokenize(parent_text))
+    for tok in merge_split_anchors(tokenize(text))[0]:
+        base = ANCHOR_ALIASES.get(tok, tok)
+        if base not in ANCHORS:
+            c = collapse_runs(tok)
+            base = c if c in ANCHORS else _COLLAPSED_ANCHORS.get(c)
+        if base is None and tok in GLUED_COMPOUNDS:
+            base = GLUED_COMPOUNDS[tok][0]
+        sense = _SENSE_RULES.get(base)
+        if sense and _has_sense(parent_tokens, sense):
+            return True
     return False
 
 
@@ -293,7 +381,11 @@ def extract_features(text):
     """
     raw_tokens = tokenize(text)
     tokens, split_flags = merge_split_anchors(raw_tokens)
+    # sense rules look at the words as typed; context features use the
+    # tanglish.json canonical spelling so "panugaa" and "pannunga" are one
+    # word to the model.
     token_set = set(tokens)
+    tokens = [canonical(t) for t in tokens]
     found = []
 
     for i, tok in enumerate(tokens):
@@ -369,7 +461,14 @@ def extract_features(text):
         for j in range(lo, hi):
             if j == i:
                 continue
-            found.append((base, tokens[j]))
+            # A word with a meaning tag in tanglish.json counts ONCE, as its
+            # tag: the model learns "NEG near pm" once for every refusal
+            # word instead of each word separately. (Counting both the
+            # word and its tag double-counts the evidence, which in a
+            # Naive Bayes model dilutes everything else — it made plain
+            # "add me" stop scoring as a DM ask.)
+            tag = tag_of(tokens[j])
+            found.append((base, "TAG_" + tag if tag else tokens[j]))
 
     return found
 
