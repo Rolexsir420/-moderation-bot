@@ -47,6 +47,13 @@ CATEGORIES = {
         "couple exchange", "item irukingla", "personal ah pesalam",
         "real meet me", "secret ah pesalam", "secret chat",
         "outside pesalam",
+        # swinger / couple-swap personals-ad slang ("cpls" = couples,
+        # "swp" = swap, "single f/m" = single female/male looking to join
+        # a couple) — none of this overlaps ordinary friend-group chat,
+        # so plain single-word/phrase matching is safe here.
+        "cpls", "cpl", "swinger", "swingers", "threesome", "3some",
+        "swp cpls", "swap cpls", "couple swap", "cpl swap", "bi cpl",
+        "single f", "single m", "mfm", "fmf",
     },
     "gender_orientation": {
         "gayboy", "les", "lesbian", "shemale", "trans",
