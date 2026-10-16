@@ -320,7 +320,7 @@ def is_direct_ask(text):
     """
     tokens, _ = merge_split_anchors(tokenize(text))
     for i, tok in enumerate(tokens):
-        base = ANCHOR_ALIASES.get(tok, tok)
+        base = ANCHOR_ALIASES.get(tok) or ANCHOR_ALIASES.get(collapse_runs(tok), tok)
         if base not in ("private", "personal", "pm"):
             continue
         guards = _SENSE_GUARDS[base]
@@ -344,7 +344,7 @@ def parent_explains(parent_text, text):
         return False
     parent_tokens = set(tokenize(parent_text))
     for tok in merge_split_anchors(tokenize(text))[0]:
-        base = ANCHOR_ALIASES.get(tok, tok)
+        base = ANCHOR_ALIASES.get(tok) or ANCHOR_ALIASES.get(collapse_runs(tok), tok)
         if base not in ANCHORS:
             c = collapse_runs(tok)
             base = c if c in ANCHORS else _COLLAPSED_ANCHORS.get(c)
@@ -403,6 +403,10 @@ def extract_features(text):
             base = tok
         elif tok in ANCHOR_ALIASES:
             base = ANCHOR_ALIASES[tok]
+        elif collapse_runs(tok) in ANCHOR_ALIASES:
+            # stretched alias: "pvtt", "pvttt", "prvvt" -> private
+            base = ANCHOR_ALIASES[collapse_runs(tok)]
+            is_letter_doubled = True
         elif tok in ("pm", "am") and i > 0 and _TIME_NUM_RE.match(tokens[i - 1]):
             # spaced time reference: "9 pm now" treated like "9pm now"
             base = tok
