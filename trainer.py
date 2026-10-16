@@ -178,7 +178,68 @@ def merge_split_anchors(tokens):
     return result, flags
 
 
-_TIME_GLUED_RE = re.compile(r"^\d{1,2}(am|pm)$")
+# "9pm", "730pm" (from "7:30pm"), "215pm" (from "2.15pm")
+_TIME_GLUED_RE = re.compile(r"^\d{1,4}(am|pm)$")
+_TIME_NUM_RE = re.compile(r"^\d{1,4}$")
+
+# --- Word-sense rules ---------------------------------------------------
+# Some anchors have a common NON-chat meaning. When the message shows that
+# meaning, the anchor is skipped entirely (it emits no features at all),
+# so the classifier never sees it as a DM word. Other anchors in the same
+# message are still checked: "pvt company la work, dm pannunga" still
+# scores on "dm".
+#
+# pvt/private: private company / school / bus / job ("pvt or govt").
+# personal:    personal reason / loan / work.
+# pm:          prime minister ("pm modi").
+# Times ("9pm", "7:30 pm", "2.15 pm", "4 pm") are handled in
+# extract_features: a pm/am that follows a number is a time, not a DM ask.
+_SENSE_RULES = {
+    "private": {
+        "company", "companies", "ltd", "limited", "govt", "government", "gov",
+        "job", "jobs", "school", "schools", "college", "bus", "hospital",
+        "bank", "sector", "office", "firm", "concern", "salary", "tuition",
+        "coaching", "clinic", "university", "institute", "vehicle", "car",
+        "property", "mnc", "startup", "factory",
+    },
+    "personal": {
+        "reason", "reasons", "loan", "work", "leave", "problem", "problems",
+        "issue", "issues", "emergency", "matter", "use", "account",
+    },
+    "pm": {"modi", "minister", "prime", "govt", "government", "election"},
+    # add: adding a THING, not a person to chat with — "ticket ah add
+    # panitingala", "en name ah list la add pannunga", "team la add pannu",
+    # "items la add pannikonga". Deliberately NOT here: number, contact,
+    # whatsapp, insta, group, id — "add my number" IS a DM ask.
+    "add": {
+        "ticket", "tickets", "list", "name", "names", "team", "teams", "cart",
+        "item", "items", "song", "songs", "playlist", "seat", "seats",
+        "booking", "score", "runs", "points", "match", "amount", "money",
+        "balance", "bill", "expense", "expenses", "salt", "sugar", "milk",
+        "grocery", "groceries", "vegetables", "photo", "photos", "album",
+        "sticker", "stickers", "emoji", "emojis", "movie", "show",
+    },
+}
+
+
+# "me" in English/Tanglish; compared after letter-run collapse ("meee"->"me")
+_SELF_WORDS = {"me", "ena", "enai", "enaya", "enaiyum", "enayum", "yenai", "yena"}
+
+
+def _has_sense(tokens, sense_words):
+    """
+    True if any token is a sense word, or (for sense words of 4+ letters)
+    starts with one, so Tamil suffixes still count: "teamla", "listla",
+    "ticketah", "companyla". Short words (bus, car, gov, ltd) are exact-
+    match only, so "card"/"carry"/"business" don't trigger "car"/"bus".
+    """
+    for tok in tokens:
+        if tok in sense_words:
+            return True
+        for w in sense_words:
+            if len(w) >= 4 and tok.startswith(w):
+                return True
+    return False
 
 
 def extract_features(text):
@@ -190,6 +251,7 @@ def extract_features(text):
     """
     raw_tokens = tokenize(text)
     tokens, split_flags = merge_split_anchors(raw_tokens)
+    token_set = set(tokens)
     found = []
 
     for i, tok in enumerate(tokens):
@@ -207,7 +269,7 @@ def extract_features(text):
             base = tok
         elif tok in ANCHOR_ALIASES:
             base = ANCHOR_ALIASES[tok]
-        elif tok in ("pm", "am") and i > 0 and re.match(r"^\d{1,2}$", tokens[i - 1]):
+        elif tok in ("pm", "am") and i > 0 and _TIME_NUM_RE.match(tokens[i - 1]):
             # spaced time reference: "9 pm now" treated like "9pm now"
             base = tok
             is_time_spaced = True
@@ -227,6 +289,24 @@ def extract_features(text):
                 base, glued_extra = _COLLAPSED_GLUED_COMPOUNDS[collapsed]
 
         if base is None:
+            continue
+
+        # times are never a DM ask: "9pm", "7:30 pm", "2.15 pm", "4 pm bro"
+        if base in ("pm", "am") and (
+            is_time_glued
+            or is_time_spaced
+            or (i > 0 and _TIME_NUM_RE.match(tokens[i - 1]))
+        ):
+            continue
+        # non-chat word sense present anywhere in the message -> skip
+        # ...unless the anchor is aimed at the sender themself ("add me",
+        # "pvt enna"), which is a DM ask whatever else the message says.
+        sense_words = _SENSE_RULES.get(base)
+        aimed_at_me = glued_extra == "me" or any(
+            collapse_runs(tokens[j]) in _SELF_WORDS
+            for j in (i - 1, i + 1) if 0 <= j < len(tokens)
+        )
+        if sense_words and not aimed_at_me and _has_sense(token_set, sense_words):
             continue
 
         found.append((base, BIAS))
