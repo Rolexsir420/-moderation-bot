@@ -28,7 +28,13 @@ import unicodedata
 SEVERE_EXPLOITATION_TERMS = {
     "rape", "raping", "raped", "rapist",
     "molest", "molesting", "molested", "molestation",
-    "childporn", "child porn", "cp",
+    "childporn", "child porn",
+    # "cp" on its own is NOT here: as a bare token it's ordinary chat
+    # (copy-paste, cricket "cp score", abbreviations) and this category is
+    # an instant .delban + urgent alert. Only explicit CSAM-trading phrasing
+    # around "cp" is listed, matched as whole words.
+    "cp video", "cp videos", "cp link", "cp links", "cp vid", "cp vids",
+    "cp collection", "cp sell", "cp selling", "cp available",
 }
 
 CATEGORIES = {
@@ -51,6 +57,9 @@ CATEGORIES = {
         # "swp" = swap, "single f/m" = single female/male looking to join
         # a couple) — none of this overlaps ordinary friend-group chat,
         # so plain single-word/phrase matching is safe here.
+        # "cpl" stays: real ads use the singular ("Real cpl here",
+        # "CPL to CPL", "c-p-l"). The innocent "cpl of days/hours" (= a
+        # couple of) is stripped out first by _SAFE_PHRASES_RE below.
         "cpls", "cpl", "swinger", "swingers", "threesome", "3some",
         "swp cpls", "swap cpls", "couple swap", "cpl swap", "bi cpl",
         "single f", "single m", "mfm", "fmf",
@@ -65,7 +74,9 @@ CATEGORIES = {
         "ugomma", "vibachari", "avusari", "avuthu",
     },
     "tamil_sexual_slang": {
-        "sunni", "sunniya", "junni", "jumni", "kunju", "poolu", "nakku",
+        # "kunju" removed: it's an everyday affectionate word ("little
+        # one"), per this file's own exclusion note at the top.
+        "sunni", "sunniya", "junni", "jumni", "poolu", "nakku",
         "சுன்னி", "கூத்தி", "பூண்டை",
     },
     "clothing_body": {
@@ -89,7 +100,10 @@ CATEGORIES = {
 PREFIX_ROOTS = {
     "tamil_abusive": {
         "punda", "pundai", "koothi", "koodhi", "oombu", "oombi", "mayiru",
-        "thevidiya", "thevudiya", "tevadiya", "munda", "vibachari",
+        "thevidiya", "thevudiya", "tevadiya", "vibachari",
+        # "munda" is NOT a prefix root: it prefixes "mundanaal" (day
+        # before yesterday). The exact word "munda" is still caught via
+        # CATEGORIES above.
     },
     "tamil_sexual_slang": {
         "sunni", "poolu", "nakku",
@@ -188,6 +202,32 @@ def _merge_split_words(tokens, words):
     return found
 
 
+def _phrase_hit(term, lowered):
+    """
+    Multi-word Latin phrase match.
+
+    Most phrases keep plain substring matching (so Tamil suffixes still
+    match, e.g. "video call vanga" inside "video call vangala"). But a
+    phrase whose LAST word is a single character ("single f", "single m")
+    or which starts with a 1-2 letter abbreviation ("cp video") is
+    matched on whole-word boundaries instead — otherwise "single m"
+    matches "single match"/"single movie", and "cp video" would match
+    inside unrelated words. "single f/" and "single f," still hit because
+    "/" and "," aren't letters or digits.
+    """
+    words = term.split()
+    if len(words[-1]) == 1 or len(words[0]) <= 2:
+        return re.search(
+            r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])", lowered
+        ) is not None
+    return term in lowered
+
+
+# Innocent phrases removed before matching, so a blocklisted word inside
+# them doesn't hit: "oru cpl of days" = "a couple of days".
+_SAFE_PHRASES_RE = re.compile(r"(?<![a-z0-9])cpl\s+of(?![a-z0-9])")
+
+
 def check_text(text):
     """
     Returns (is_hit, categories) where categories is a set of category
@@ -197,7 +237,7 @@ def check_text(text):
         return False, set()
 
     text = _normalize_unicode(text)
-    lowered = text.lower()
+    lowered = _SAFE_PHRASES_RE.sub(" ", text.lower())
     tokens = _WORD_RE.findall(lowered)
     hit_categories = set()
 
@@ -206,8 +246,12 @@ def check_text(text):
     for category, terms in CATEGORIES.items():
         single_word_terms = set()
         for term in terms:
-            if " " in term or any(ord(c) > 0x2000 for c in term):
+            if any(ord(c) > 0x2000 for c in term):
+                # non-Latin script (Tamil): plain substring, unchanged
                 if term in lowered:
+                    hit_categories.add(category)
+            elif " " in term:
+                if _phrase_hit(term, lowered):
                     hit_categories.add(category)
             else:
                 single_word_terms.add(term)
