@@ -43,6 +43,7 @@ import blocklist
 import conversation_tracker
 import strikes
 from predict import classify, load_weights
+from trainer import is_direct_ask
 
 weights = load_weights()
 
@@ -164,6 +165,10 @@ async def try_reply_context_rescue(client, message, text, original_total):
     Returns (rescued: bool, parent_text: str | None).
     """
     if not message.reply_to_message_id:
+        return False, None
+    if is_direct_ask(text):
+        # "Pvt vaa" / "pm vaanga" ask directly; a reply to someone's
+        # pvt-company message doesn't make that innocent.
         return False, None
     try:
         parent = await client.get_messages(message.chat.id, message.reply_to_message_id)
@@ -297,7 +302,7 @@ async def moderate(client, message: Message, is_edit=False):
                 # rescue, against what OTHER people said in the last 2 min.
                 # Only reachable for borderline ("uncertain") scores, so a
                 # confident ask like "Pvt vaa" is never rescued this way.
-                if not rescued_by_history:
+                if not rescued_by_history and not is_direct_ask(text):
                     for other_text in conversation_tracker.get_recent_chat_texts(
                         message.chat.id, user_id,
                     ):
