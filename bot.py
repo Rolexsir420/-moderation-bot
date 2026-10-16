@@ -72,6 +72,14 @@ CATEGORY_REASONS = [
 # whatever the in-group bot does.
 SEVERE_CATEGORIES = {"severe_exploitation"}
 
+# Anchors that are a DM ask even as a bare one-word reply ("add", "dm",
+# "pm", "pvt" replying to "hi"). Deliberately NOT here: "message", "personal",
+# "contact", "reach", "akka", "aunty", "ex", "mes" — as a bare
+# reply those are almost always ordinary chat ("Message pathiya", "No
+# personal", "Personal" replying to "Enga?"), and the group's own history
+# showed them being muted wrongly by the bare-reply rule.
+BARE_REPLY_ANCHORS = {"add", "dm", "pm", "ib", "inbox", "msg", "txt", "text", "ping", "private"}
+
 
 def reason_for_categories(categories):
     for category, reason in CATEGORY_REASONS:
@@ -320,6 +328,7 @@ async def moderate(client, message: Message, is_edit=False):
         and not has_real_context
         and word_count <= 2
         and message.reply_to_message_id
+        and {a for a, _f, _w in hits} & BARE_REPLY_ANCHORS
     ):
         # A bare anchor word used only as a reply/tag ("add", "pm") with
         # no other context of its own, AND the base score wasn't even
