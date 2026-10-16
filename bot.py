@@ -140,7 +140,7 @@ async def apply_blocklist_action(client, message, categories, user_id):
     else:
         await log_to_admin(
             client,
-            f"[blocklist] user={user_id} categories={sorted(categories)} "
+            f"[blocklist] msg_id={message.id} user={user_id} categories={sorted(categories)} "
             f"strike_count={new_count} -> {cmd_text}",
         )
 
@@ -183,8 +183,38 @@ async def try_reply_context_rescue(client, message, text, original_total):
     return rescued, parent_text
 
 
-@app.on_message(filters.group & filters.text & ~filters.bot)
+# Text messages AND media (photo/video/document/...) that carry a caption.
+# filters.text alone skipped captions, so "dm me" written on a photo was
+# never checked.
+MODERATED = filters.group & (filters.text | filters.caption) & ~filters.bot
+
+
+@app.on_message(MODERATED)
 async def handle_group_message(client, message: Message):
+    await moderate(client, message, is_edit=False)
+
+
+@app.on_edited_message(MODERATED)
+async def handle_edited_group_message(client, message: Message):
+    """
+    Closes the "send something clean, then edit it into 'add me'"
+    evasion. Guards against false triggers:
+      - Telegram also sends edit updates for reaction changes; those
+        carry no edit_date (or unchanged text), so they're skipped.
+      - a message we already actioned is never actioned a second time.
+      - spam detection is skipped for edits (an edit isn't a new send).
+    """
+    if not getattr(message, "edit_date", None):
+        return
+    prev = conversation_tracker.get_record(message.chat.id, message.id)
+    new_text = message.text or message.caption or ""
+    if prev is not None:
+        if prev["is_abusive"] or prev["text"] == new_text:
+            return
+    await moderate(client, message, is_edit=True)
+
+
+async def moderate(client, message: Message, is_edit=False):
     user = message.from_user
 
     # never act on our own messages (this is a userbot, not a separate
@@ -211,7 +241,9 @@ async def handle_group_message(client, message: Message):
         # discovery mode: no TARGET_CHAT_IDS set yet, just log chat ids
         print(f"[DEBUG] message from chat id={message.chat.id} title={message.chat.title!r}")
 
-    text = message.text or ""
+    text = message.text or message.caption or ""
+    if not text.strip():
+        return
     user_id = user.id if user else None
     is_abusive = False
 
@@ -260,6 +292,19 @@ async def handle_group_message(client, message: Message):
                     if combined_total < 0:
                         rescued_by_history = True
                         break
+                # untagged answer to someone else's recent question ("pvt
+                # or govt?" -> "nanba pvt la"): same test as the reply
+                # rescue, against what OTHER people said in the last 2 min.
+                # Only reachable for borderline ("uncertain") scores, so a
+                # confident ask like "Pvt vaa" is never rescued this way.
+                if not rescued_by_history:
+                    for other_text in conversation_tracker.get_recent_chat_texts(
+                        message.chat.id, user_id,
+                    ):
+                        _l, combined_total, _h = classify(other_text + " " + text, weights)
+                        if combined_total < total and combined_total < config.WARN_THRESHOLD * 0.5:
+                            rescued_by_history = True
+                            break
                 should_mute = not rescued_by_history
     elif (
         anchor_present
@@ -284,7 +329,8 @@ async def handle_group_message(client, message: Message):
         is_abusive = True
         await log_to_admin(
             client,
-            f"[dm-solicitation] user={user_id} score={total:.2f} -> {cmd_text}",
+            f"[dm-solicitation{' (edited msg)' if is_edit else ''}] "
+            f"user={user_id} score={total:.2f} -> {cmd_text}",
         )
         conversation_tracker.record_message(
             message.chat.id, message.id, user_id, message.reply_to_message_id, text, True,
@@ -292,8 +338,9 @@ async def handle_group_message(client, message: Message):
         return
 
     # --- 3. duplicate-message spam detection (only reached for messages
-    #     that are otherwise clean) ---
-    is_duplicate = conversation_tracker.check_and_record_duplicate(
+    #     that are otherwise clean; never for edits — an edit isn't a
+    #     new send, so it must not count toward the repeat threshold) ---
+    is_duplicate = (not is_edit) and conversation_tracker.check_and_record_duplicate(
         chat_id=message.chat.id, user_id=user_id, text=text,
     )
     if is_duplicate:
