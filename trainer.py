@@ -117,11 +117,35 @@ def normalize_unicode(text):
     return text
 
 
+_WS_SPLIT_RE = re.compile(r"\s+")
+_NON_ALNUM_RE = re.compile(r"[^a-z0-9']")
+
+
 def tokenize(text):
     # keep digits glued to letters ("9pm" stays "9pm", not stripped to "pm")
-    # so the model can actually learn "digit+pm/am = time" from data
+    # so the model can actually learn "digit+pm/am = time" from data.
+    #
+    # Split on WHITESPACE first, then strip punctuation out of each
+    # whitespace-delimited chunk, rather than letting punctuation itself
+    # act as a token separator. This closes an evasion gap: a plain
+    # regex-findall over the whole string treats "..a...ddd" (dots used
+    # to break up "add" without any actual spaces) as two unrelated
+    # tokens ("a", "ddd"), which no downstream collapse/merge step can
+    # reassemble (merge_split_anchors only reassembles runs of true
+    # SINGLE-character tokens). Cleaning punctuation out of each
+    # whitespace chunk instead turns "..a...ddd" into one token "addd",
+    # which collapse_runs/._COLLAPSED_ANCHORS already handles correctly.
+    # This is a strict superset of the old behavior for ordinary text:
+    # when punctuation only ever appears BETWEEN whitespace-separated
+    # words (the normal case), the result is identical either way.
     text = normalize_unicode(text)
-    return re.findall(r"[a-zA-Z0-9']+", text.lower())
+    text = text.lower()
+    tokens = []
+    for chunk in _WS_SPLIT_RE.split(text.strip()):
+        cleaned = _NON_ALNUM_RE.sub("", chunk)
+        if cleaned:
+            tokens.append(cleaned)
+    return tokens
 
 
 def merge_split_anchors(tokens):
