@@ -31,7 +31,18 @@ _spam_history = {}
 
 
 def record_message(chat_id, msg_id, user_id, reply_to_id, text, is_abusive):
+    """
+    Adds a message to the chat's short-term history. If this msg_id is
+    already recorded (an EDITED message), the existing record is updated
+    in place instead of appending a duplicate, so history rescue never
+    sees both the old and the edited text as two separate messages.
+    """
     buf = history.setdefault(chat_id, deque(maxlen=config.MAX_HISTORY_PER_CHAT))
+    for m in buf:
+        if m["msg_id"] == msg_id:
+            m["text"] = text
+            m["is_abusive"] = m["is_abusive"] or is_abusive
+            return
     buf.append({
         "msg_id": msg_id,
         "user_id": user_id,
@@ -76,6 +87,17 @@ def find_instigator(chat_id, target_user_id, target_msg_id, reply_to_id):
     return None, None
 
 
+def get_record(chat_id, msg_id):
+    """The stored record for msg_id in this chat, or None if not in the window."""
+    buf = history.get(chat_id)
+    if not buf:
+        return None
+    for m in buf:
+        if m["msg_id"] == msg_id:
+            return m
+    return None
+
+
 def get_recent_texts(chat_id, user_id, exclude_msg_id=None, n=3):
     """
     Returns up to n of this sender's own most recent message texts in
@@ -90,6 +112,30 @@ def get_recent_texts(chat_id, user_id, exclude_msg_id=None, n=3):
         if m["user_id"] != user_id:
             continue
         if exclude_msg_id is not None and m["msg_id"] == exclude_msg_id:
+            continue
+        out.append(m["text"])
+        if len(out) >= n:
+            break
+    return out
+
+
+def get_recent_chat_texts(chat_id, exclude_user_id, within_seconds=120, n=5):
+    """
+    Up to n recent message texts from OTHER users in this chat, sent in the
+    last within_seconds (most recent first), skipping ones already flagged
+    abusive. Used ONLY to rescue a borderline score toward safe when
+    someone answers a question without tagging it — e.g. Prem asks "pvt
+    or govt?" and Tharun just types "nanba pvt la".
+    """
+    buf = history.get(chat_id)
+    if not buf:
+        return []
+    now = time.time()
+    out = []
+    for m in reversed(buf):
+        if now - m["ts"] > within_seconds:
+            break
+        if m["user_id"] == exclude_user_id or m["is_abusive"]:
             continue
         out.append(m["text"])
         if len(out) >= n:
