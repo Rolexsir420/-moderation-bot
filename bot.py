@@ -45,7 +45,8 @@ import strikes
 import review_log
 from predict import classify, load_weights
 from trainer import (is_direct_ask, parent_explains, is_cant_complaint,
-                     context_is_about_messages, mentions_someones_message)
+                     context_is_about_messages, mentions_someones_message, is_refusal,
+                     is_strong_ask)
 
 weights = load_weights()
 
@@ -215,6 +216,11 @@ async def try_reply_context_rescue(client, message, text, original_total):
 
     combined_text = parent_text + " " + text
     _combined_label, combined_total, _combined_hits = classify(combined_text, weights)
+    if not _combined_hits:
+        # every DM word got switched off by a meaning rule because of the
+        # parent's words ("group exams" <- "Addd panuga"): not a real
+        # rescue; meaning-based rescues go through parent_explains above
+        return False, parent_text
     rescued = (
         combined_total < original_total
         and combined_total < (config.WARN_THRESHOLD * 0.5)
@@ -298,6 +304,15 @@ async def moderate(client, message: Message, is_edit=False):
         )
         return
 
+    # --- 1a. refusals and rule talk: "Don't pm me", "DM not allowed",
+    #     "dm pannathinga", "text panatha" — never a request ---
+    if is_refusal(text):
+        await review(client, message, text, "none", "refusal_or_rule", is_edit=is_edit)
+        conversation_tracker.record_message(
+            message.chat.id, message.id, user_id, message.reply_to_message_id, text, False,
+        )
+        return
+
     # --- 1b. "can't / didn't" replies inside a conversation about messages ---
     # "Msg panna mudiyala" answering "enna pa inaiku un msg ye kaanom" is
     # part of that conversation: no action. The same words out of the blue
@@ -335,7 +350,15 @@ async def moderate(client, message: Message, is_edit=False):
     reason = "below_threshold"
     _parent_text = None
 
-    if label == "warn":
+    if is_strong_ask(text):
+        # "dm pannunga", "pm me", "pvt vaa": always a DM ask, even when
+        # other words in the sentence pull the learned score down
+        should_mute = True
+        reason = "strong_dm_ask"
+
+    if should_mute:
+        pass
+    elif label == "warn":
         rescued, _parent_text = await try_reply_context_rescue(client, message, text, total)
         if not rescued:
             should_mute = True
