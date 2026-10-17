@@ -55,6 +55,7 @@ GLUED_COMPOUNDS = {
 # anchor word, so they share that anchor's learned vocabulary instead of
 # being invisible to the classifier.
 ANCHOR_ALIASES = {
+    "pv": "private",
     "pvt": "private",
     "prvt": "private",
     "prv": "private",
@@ -119,6 +120,7 @@ def normalize_unicode(text):
 
 _WS_SPLIT_RE = re.compile(r"\s+")
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9']")
+_PUNCT_SPLIT_RE = re.compile(r"[^a-z0-9']+")
 
 
 def tokenize(text):
@@ -138,13 +140,23 @@ def tokenize(text):
     # This is a strict superset of the old behavior for ordinary text:
     # when punctuation only ever appears BETWEEN whitespace-separated
     # words (the normal case), the result is identical either way.
+    #
+    # Punctuation INSIDE a chunk: if it splits off single letters ("d.m",
+    # "..a...ddd", "7:30") it's evasion or a number, so the pieces are
+    # JOINED; if every piece is a real word ("dm,pannunga",
+    # "electrician,dm", "girls.dm.me") it separates words, so the pieces
+    # are KEPT SEPARATE.
     text = normalize_unicode(text)
     text = text.lower()
     tokens = []
     for chunk in _WS_SPLIT_RE.split(text.strip()):
-        cleaned = _NON_ALNUM_RE.sub("", chunk)
-        if cleaned:
-            tokens.append(cleaned)
+        pieces = [p for p in _PUNCT_SPLIT_RE.split(chunk) if p]
+        if not pieces:
+            continue
+        if len(pieces) == 1 or any(len(p) == 1 for p in pieces):
+            tokens.append("".join(pieces))
+        else:
+            tokens.extend(pieces)
     return tokens
 
 
@@ -258,12 +270,17 @@ _SENSE_GUARDS = {
 _CANON = {}       # collapsed spelling -> canonical word
 _TAG_OF = {}      # collapsed word -> tag name
 _CANT_WORDS = set()     # "can't / didn't see" words (canonical)
+_NEG_BEFORE = set()     # "don't", "no", "never" right before a DM word
+_NEG_AFTER = set()      # "pannathinga", "vendam" right after a DM word
+_REPORTED_AFTER = set() # "pannuchu", "panraanga": someone else did it
 _GROUP_WORDS = set()    # "in the group / here / in vc" (collapsed)
 _TOPIC_WORDS = set()    # words that make a conversation about messaging
 _PRIVATE_WORDS = set()  # any of these cancels the group-location rule
 # anchors that mean "send a message" in general, so a group location next
 # to them makes them innocent; dm/pm/ib/inbox/private are private by nature
 _GROUP_RULE_ANCHORS = {"msg", "message", "text", "txt", "mes"}
+_DETERMINERS = {collapse_runs(w) for w in ("antha", "andha", "indha", "intha", "inda", "anda",
+                                             "that", "this", "those", "these", "ithu", "athu")}
 _LOC_FILLERS = {"la", "le", "lu", "ku", "il", "ile", "in", "ah", "a", "e", "ey", "ye", "le"}
 _REQUEST_VERBS = set()  # "do it / come" verbs that keep a DM ask a DM ask
 TANGLISH_LOADED = False
@@ -299,6 +316,14 @@ def _load_tanglish():
     for w in lex.get("request_verbs", []):
         c = collapse_runs(w.lower())
         _REQUEST_VERBS.add(_CANON.get(c, c))
+    for w in lex.get("neg_before", []):
+        _NEG_BEFORE.add(collapse_runs(w.lower()))
+    for w in lex.get("neg_after", []):
+        c = collapse_runs(w.lower())
+        _NEG_AFTER.add(_CANON.get(c, c))
+    for w in lex.get("reported_after", []):
+        c = collapse_runs(w.lower())
+        _REPORTED_AFTER.add(_CANON.get(c, c))
     for w in lex.get("topic_words", []):
         _TOPIC_WORDS.add(collapse_runs(w.lower()))
     for w in lex.get("group_words", []):
@@ -339,7 +364,7 @@ def is_direct_ask(text):
     ("add" is not included: "Add me" replying to a game invite is a
     legitimate rescue case.)
     """
-    tokens, _ = merge_split_anchors(tokenize(text))
+    tokens, _ = split_glued(*merge_split_anchors(tokenize(text)))
     for i, tok in enumerate(tokens):
         base = ANCHOR_ALIASES.get(tok) or ANCHOR_ALIASES.get(collapse_runs(tok), tok)
         if base not in ("private", "personal", "pm"):
@@ -349,6 +374,11 @@ def is_direct_ask(text):
             if 0 <= j < len(tokens) and collapse_runs(tokens[j]) in guards:
                 return True
     return False
+
+
+# "to me" words: "text pannu enaku" asks to be texted personally
+_TO_ME = {collapse_runs(w) for w in ("enaku", "enakku", "enku", "ennaku", "yenaku",
+                                     "yenakku", "enakum", "enakkum", "naaku", "ennai")}
 
 
 def parent_explains(parent_text, text):
@@ -364,7 +394,26 @@ def parent_explains(parent_text, text):
     if not parent_text or is_direct_ask(text):
         return False
     parent_tokens = set(tokenize(parent_text))
-    for tok in merge_split_anchors(tokenize(text))[0]:
+    reply_tokens = split_glued(*merge_split_anchors(tokenize(text)))[0]
+    # parent is about the group / group VC ("grp vc va", "group la vaa"),
+    # reply is about texting/messaging ("illa da veetila aal irukanga text
+    # panure"): answering a group plan. Not when the reply is aimed at "me"
+    # ("text me") or uses any private word ("pvt la text pannu").
+    parent_group = any(collapse_runs(t) in _GROUP_WORDS
+                       or any(collapse_runs(t).startswith(g) and len(g) >= 3 for g in _GROUP_WORDS)
+                       for t in parent_tokens)
+    if parent_group and _GROUP_WORDS:
+        has_private = any(collapse_runs(t) in _PRIVATE_WORDS
+                          or ANCHOR_ALIASES.get(collapse_runs(t)) == "private"
+                          or collapse_runs(t) in _TO_ME
+                          for t in reply_tokens)
+        for i, tok in enumerate(reply_tokens):
+            if _anchor_base(tok) in _GROUP_RULE_ANCHORS:
+                aimed = any(collapse_runs(reply_tokens[j]) in _SELF_WORDS
+                            for j in (i - 1, i + 1) if 0 <= j < len(reply_tokens))
+                if not aimed and not has_private:
+                    return True
+    for tok in reply_tokens:
         base = ANCHOR_ALIASES.get(tok) or ANCHOR_ALIASES.get(collapse_runs(tok), tok)
         if base not in ANCHORS:
             c = collapse_runs(tok)
@@ -372,6 +421,11 @@ def parent_explains(parent_text, text):
         if base is None and tok in GLUED_COMPOUNDS:
             base = GLUED_COMPOUNDS[tok][0]
         sense = _SENSE_RULES.get(base)
+        if sense and base == "add":
+            # "group" in the PARENT is too generic ("Anyone studying for group
+            # exams" <- "Addd panuga"); adding-to-a-group counts only when the
+            # reply itself says it
+            sense = sense - {"group", "grp", "groups", "gc", "channel"}
         if sense and _has_sense(parent_tokens, sense):
             return True
     return False
@@ -403,7 +457,7 @@ def is_cant_complaint(text):
     """
     if not _CANT_WORDS:
         return False
-    tokens = [canonical(t) for t in merge_split_anchors(tokenize(text))[0]]
+    tokens = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
     if any(collapse_runs(t) in _REQUEST_VERBS or t in _REQUEST_VERBS for t in tokens):
         return False
     for i, tok in enumerate(tokens):
@@ -427,9 +481,107 @@ _POSSESSIVE = {"un", "unga", "ungal", "ungaloda", "unoda", "unnoda", "your", "ur
 def mentions_someones_message(text):
     """'un msg padika mudila', 'unga text varala': about someone's own
     message, so it belongs to the conversation even without topic words."""
-    tokens = [canonical(t) for t in merge_split_anchors(tokenize(text))[0]]
+    tokens = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
     for i, tok in enumerate(tokens):
         if _anchor_base(tok) and i > 0 and collapse_runs(tokens[i - 1]) in {collapse_runs(w) for w in _POSSESSIVE}:
+            return True
+    return False
+
+
+def is_refusal(text):
+    """
+    (Also covers REPORTS of what someone else did: "antha ponnu enaku dm
+    pannuchu", "private msg panraanga" via tanglish.json reported_after.)
+    "Don't pm me", "No dm please", "yaarum dm pannathinga", "pm vendam",
+    "DM PM not allowed", "Dm invite pana kudadhu", "text panatha": a DM
+    word right after a neg_before word, or followed within 3 words by a
+    neg_after word (tanglish.json), with no request verb in the message.
+    Used by bot.py as a decision rule; it does NOT change training
+    features, so the model keeps learning from refusal examples.
+    """
+    if not (_NEG_BEFORE or _NEG_AFTER):
+        return False
+    tokens = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
+    if any((t in _REQUEST_VERBS or tag_of(t) == "REQUEST") and t not in _NEG_AFTER
+           and t not in ("please", "pls", "plz") for t in tokens):
+        return False
+    for i, tok in enumerate(tokens):
+        if _anchor_base(tok) is None:
+            continue
+        if i > 0 and collapse_runs(tokens[i - 1]) in _NEG_BEFORE:
+            return True
+        if i + 1 < len(tokens) and collapse_runs(tokens[i + 1]) in _SELF_WORDS:
+            continue  # "dm me, not interested in others" is still an ask
+        if any(tokens[j] in _NEG_AFTER or collapse_runs(tokens[j]) in _NEG_AFTER
+               or tokens[j] in _REPORTED_AFTER or collapse_runs(tokens[j]) in _REPORTED_AFTER
+               for j in range(i + 1, min(len(tokens), i + 4))):
+            return True
+    return False
+
+
+_STRONG_ANCHORS = {"dm", "pm", "ib", "inbox", "private"}
+# a 10-digit Indian mobile number, also partly masked ("98xxxxxx10")
+_PHONE_RE = re.compile(r"(?:91)?[6-9][0-9x]{9}")
+_CONTACT_WORDS = {"call", "cal", "whatsapp", "whatsap", "watsapp", "watsap", "wa", "contact", "ping", "msg", "text", "dm"}
+
+
+def is_strong_ask(text):
+    """
+    "dm pannunga", "pm me", "pvt vaa", "inbox wagga", "ib pannunga": a DM
+    word that is ALWAYS private (dm/pm/ib/inbox/pvt) directly followed by
+    a request verb or "me". Not for times ("9 pm vaa"), not when the
+    message talks to/about admin ("emergency admin pm pannunga"), not for
+    refusals, and not when the pvt/pm sense rule applies (pvt company,
+    pm modi). bot.py mutes these even when other words in the sentence
+    would pull the learned score down.
+    """
+    if is_refusal(text):
+        return False
+    tokens = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
+    if any(collapse_runs(t).startswith("admin") for t in tokens):
+        return False
+    # sharing a phone number to be called/messaged: "en number 98xxxxxx10 call pannunga"
+    raw = tokenize(text)
+    joined = []  # "98765 43210" -> one token
+    for t in raw:
+        if joined and t.isdigit() and joined[-1].isdigit():
+            joined[-1] += t
+        else:
+            joined.append(t)
+    if any(_PHONE_RE.fullmatch(t) for t in joined) and any(
+            t in _CONTACT_WORDS or collapse_runs(t) in _CONTACT_WORDS or _anchor_base(t) for t in tokens):
+        return True
+    for i, tok in enumerate(tokens):
+        base = _anchor_base(tok)
+        # "text me", "txt me outside", "msg me": asking to be messaged
+        if base in ("text", "txt", "msg", "message", "mes") and i + 1 < len(tokens):
+            nxt = collapse_runs(tokens[i + 1])
+            if nxt in ("me", "mee"):
+                # "text me in group" / "msg me grp la" = in the group: fine,
+                # unless a private word says otherwise ("txt me outside of grp")
+                after = [collapse_runs(t) for t in tokens[i + 2:i + 5]]
+                in_group = any(a in _GROUP_WORDS for a in after)
+                private = any(collapse_runs(t) in _PRIVATE_WORDS for t in tokens)
+                if in_group and not private:
+                    continue
+                return True
+            # "can i text u", "shall i msg you" (but not "text u back")
+            if nxt in ("u", "you", "yu") and i >= 2 and collapse_runs(tokens[i - 1]) == "i" \
+                    and collapse_runs(tokens[i - 2]) in ("can", "shall", "may", "should") \
+                    and not (i + 2 < len(tokens) and collapse_runs(tokens[i + 2]) in ("back", "later")):
+                return True
+    token_set = set(tokens)
+    for i, tok in enumerate(tokens):
+        base = _anchor_base(tok)
+        if base not in _STRONG_ANCHORS or i + 1 >= len(tokens):
+            continue
+        if base in ("pm",) and i > 0 and (_TIME_NUM_RE.match(tokens[i - 1]) or _TIME_GLUED_RE.match(tok)):
+            continue
+        sense = _SENSE_RULES.get(base)
+        nxt = tokens[i + 1]
+        if (nxt in _REQUEST_VERBS or tag_of(nxt) == "REQUEST" or collapse_runs(nxt) in _SELF_WORDS):
+            if sense and _has_sense(token_set, sense) and collapse_runs(nxt) not in _REQUEST_WORDS:
+                continue
             return True
     return False
 
@@ -468,6 +620,37 @@ def _has_sense(tokens, sense_words):
     return False
 
 
+def split_glued(tokens, flags):
+    """
+    "addpannunga" -> "add" "pannunga", "dmpannunga" -> "dm" "pannunga",
+    "dmmmpannugaa" -> "dm" "pannuga", "msgpannu" -> "msg" "pannu".
+    Only when the rest is a request verb or "me"-word, so ordinary words
+    that merely start with an anchor ("address", "dmk", "pmk", "adding",
+    "message") are left alone.
+    """
+    out, out_flags = [], []
+    for tok, fl in zip(tokens, flags):
+        done = False
+        if tok not in ANCHORS and tok not in GLUED_COMPOUNDS and len(tok) >= 5:
+            c = collapse_runs(tok)
+            for a in sorted(set(ANCHORS) | set(_COLLAPSED_ANCHORS), key=len, reverse=True):
+                if len(a) < 2 or not c.startswith(a):
+                    continue
+                rest = c[len(a):]
+                base = a if a in ANCHORS else _COLLAPSED_ANCHORS[a]
+                rest_canon = canonical(rest)
+                if (rest_canon in _REQUEST_VERBS or tag_of(rest_canon) == "REQUEST"
+                        or rest in _SELF_WORDS or rest_canon in _SELF_WORDS):
+                    out += [base, rest_canon]
+                    out_flags += [fl, False]
+                    done = True
+                break
+        if not done:
+            out.append(tok)
+            out_flags.append(fl)
+    return out, out_flags
+
+
 def extract_features(text):
     """
     Returns list of (anchor, feature) pairs found in this text.
@@ -477,6 +660,7 @@ def extract_features(text):
     """
     raw_tokens = tokenize(text)
     tokens, split_flags = merge_split_anchors(raw_tokens)
+    tokens, split_flags = split_glued(tokens, split_flags)
     # sense rules look at the words as typed; context features use the
     # tanglish.json canonical spelling so "panugaa" and "pannunga" are one
     # word to the model.
@@ -547,6 +731,11 @@ def extract_features(text):
         # (can't/didn't complaints like "msg panna mudiyala" are NOT skipped
         # here: whether they're innocent depends on the conversation, so
         # bot.py decides with is_cant_complaint() + context_is_about_messages())
+        # a specific message: "antha msg", "indha text", "that message"
+        if (base in _GROUP_RULE_ANCHORS and i > 0 and collapse_runs(tokens[i - 1]) in _DETERMINERS
+                and not (i + 1 < len(tokens) and (tokens[i + 1] in _REQUEST_VERBS
+                                                  or tag_of(tokens[i + 1]) == "REQUEST"))):
+            continue
         # sent IN THE GROUP: "group la msg pannuga", "inga msg pannu",
         # "vc la msg on panungaa", "text here" — allowed. Needs the group
         # word right beside the anchor (fillers like "la" skipped), and no
