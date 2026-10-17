@@ -72,6 +72,11 @@ SPAM_WINDOW_HOURS = float(os.environ.get("SPAM_WINDOW_HOURS", "24"))
 SPAM_MUTE_HOURS = float(os.environ.get("SPAM_MUTE_HOURS", "3"))
 SPAM_REPEAT_THRESHOLD = int(os.environ.get("SPAM_REPEAT_THRESHOLD", "8"))
 
+# --- Review log (decisions saved for the admin to label; never auto-trains) ---
+REVIEW_LOG_PATH = os.path.join(DATA_DIR, "review_log.jsonl")
+REVIEW_LOG_ENABLED = os.environ.get("REVIEW_LOG_ENABLED", "1") not in ("0", "false", "False", "")
+REVIEW_LOG_MAX_MB = float(os.environ.get("REVIEW_LOG_MAX_MB", "5"))
+
 # --- Conversation / instigator / reply-context tracking ---
 CONTEXT_WINDOW_SECONDS = int(os.environ.get("CONTEXT_WINDOW_SECONDS", "300"))
 MAX_HISTORY_PER_CHAT = int(os.environ.get("MAX_HISTORY_PER_CHAT", "50"))
