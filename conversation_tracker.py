@@ -119,6 +119,17 @@ def get_recent_texts(chat_id, user_id, exclude_msg_id=None, n=3):
     return out
 
 
+def get_last_messages(chat_id, n=5, exclude_msg_id=None):
+    """The last n messages in the chat (any sender, oldest first), as
+    {"user_id", "text"} — context saved with each review-log entry."""
+    buf = history.get(chat_id)
+    if not buf:
+        return []
+    out = [{"user_id": m["user_id"], "text": m["text"]}
+           for m in buf if m["msg_id"] != exclude_msg_id]
+    return out[-n:]
+
+
 def get_recent_chat_texts(chat_id, exclude_user_id, within_seconds=120, n=5):
     """
     Up to n recent message texts from OTHER users in this chat, sent in the
