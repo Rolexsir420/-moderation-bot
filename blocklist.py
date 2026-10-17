@@ -48,7 +48,16 @@ CATEGORIES = {
         "bikini", "tits", "video call vanga",
     },
     "relationship_dating": {
-        "hookup", "hookups", "fwb", "wife", "married", "darling", "baby",
+        "hookup", "hookups", "fwb", "wife", "darling",
+        # "married" only in personals-ad phrases ("married woman", "married
+        # guy here"): "Recently married and moved here" is normal chat.
+        "married woman", "married women", "married guy", "married man",
+        "married men", "married here", "married aunty", "married girl",
+        "married lady", "married ladies", "married couple", "married cpl",
+        "m married", "f married",
+        # "baby" only in flirting phrases: "baby ku kal vali" is a real baby.
+        "hi baby", "hii baby", "hey baby", "baby vc", "baby vaa", "baby va",
+        "my baby", "baby dm", "baby pm", "baby msg", "come baby", "sweet baby",
         "milf", "bhabhi", "housewife", "available", "virgin",
         "couple exchange", "item irukingla", "personal ah pesalam",
         "real meet me", "secret ah pesalam", "secret chat",
@@ -66,17 +75,31 @@ CATEGORIES = {
     },
     "gender_orientation": {
         "gayboy", "les", "lesbian", "shemale", "trans",
+        # group policy: plain "gay" is also warned (Group Help banned it too)
+        "gay", "gays",
+        # restored: removed by mistake in the 04-Oct update
+        "aravaani", "bisexual", "lesbians", "transgender",
     },
     "tamil_abusive": {
         "punda", "pundai", "koothi", "koodhi", "oombu", "oombi", "mayiru",
         "thevidiya", "thevudiya", "tevadiya", "munda", "baadu",
+        # more spellings seen in the group
+        "thevadiya", "thevdiya", "thevudya", "thevidya", "tevdiya", "thevadia",
+        "thevidia", "thevudia", "dhevidiya", "dhevadiya",
+        # f-spelling of punda/pundai (exact words only: "fundamental" is safe)
+        "funda", "fundai", "fundae", "fundaa",
+        # restored: removed by mistake in the 04-Oct update
+        "bastard", "bunda", "fucker", "gomma", "gommala", "gommalaka", "kandaroli", "lavade", "mairru", "mairu", "mayirandi", "olu maari", "olumaari", "ombuga", "ommala", "oompi", "punde", "tevudiya", "thayoli", "ungomma", "ungoppa", "ungoppan",
         "wathalaka", "okuren", "okanum", "ollu", "olu", "oluka", "oluthu",
-        "ugomma", "vibachari", "avusari", "avuthu",
+        "ugomma", "vibachari", "avusari",
+        # "avuthu" removed: also means "it'll happen" ("job avuthu")
     },
     "tamil_sexual_slang": {
         # "kunju" removed: it's an everyday affectionate word ("little
         # one"), per this file's own exclusion note at the top.
         "sunni", "sunniya", "junni", "jumni", "poolu", "nakku",
+        # restored: removed by mistake in the 04-Oct update
+        "kai adikuren", "kundi", "kundiadi", "kuthi", "nakkuren", "oolu", "oomba", "sappu", "umbu", "ஊம்ப", "ஊம்பு", "ஓக்காளி", "ஓத்தா", "ஓம்மால", "கையடி", "சப்பு", "புண்ட", "புண்டை", "பூலு", "பூல்", "பொச்சு", "முலை", "விந்து",
         "சுன்னி", "கூத்தி", "பூண்டை",
     },
     "clothing_body": {
@@ -101,12 +124,16 @@ PREFIX_ROOTS = {
     "tamil_abusive": {
         "punda", "pundai", "koothi", "koodhi", "oombu", "oombi", "mayiru",
         "thevidiya", "thevudiya", "tevadiya", "vibachari",
+        "thevadiya", "thevdiya", "thevudya", "thevidya", "tevdiya", "dhevidiya",
+        "dhevadiya", "fundai",
         # "munda" is NOT a prefix root: it prefixes "mundanaal" (day
         # before yesterday). The exact word "munda" is still caught via
         # CATEGORIES above.
     },
     "tamil_sexual_slang": {
         "sunni", "poolu", "nakku",
+        # restored root from the original list
+        "kundiadi",
     },
 }
 
