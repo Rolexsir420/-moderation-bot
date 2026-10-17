@@ -42,8 +42,10 @@ import config
 import blocklist
 import conversation_tracker
 import strikes
+import review_log
 from predict import classify, load_weights
-from trainer import is_direct_ask, parent_explains
+from trainer import (is_direct_ask, parent_explains, is_cant_complaint,
+                     context_is_about_messages, mentions_someones_message)
 
 weights = load_weights()
 
@@ -152,6 +154,26 @@ async def apply_blocklist_action(client, message, categories, user_id):
             f"[blocklist] msg_id={message.id} user={user_id} categories={sorted(categories)} "
             f"strike_count={new_count} -> {cmd_text}",
         )
+
+
+async def review(client, message, text, action, reason, *, score=None,
+                 categories=None, parent_text=None, is_edit=False):
+    """Save this decision to the review log (never affects the decision)."""
+    try:
+        if parent_text is None and message.reply_to_message_id:
+            try:
+                parent = await client.get_messages(message.chat.id, message.reply_to_message_id)
+                parent_text = getattr(parent, "text", None) or getattr(parent, "caption", None) or ""
+            except Exception:
+                parent_text = None
+        review_log.log(
+            message=message, text=text, action=action, reason=reason, score=score,
+            categories=categories, reply_to_text=parent_text, is_edit=is_edit,
+            prev_messages=conversation_tracker.get_last_messages(
+                message.chat.id, n=5, exclude_msg_id=message.id),
+        )
+    except Exception as e:
+        print(f"[ERROR] review failed: {type(e).__name__}: {e}")
 
 
 async def try_reply_context_rescue(client, message, text, original_total):
@@ -268,10 +290,40 @@ async def moderate(client, message: Message, is_edit=False):
     is_hit, categories = blocklist.check_text(text)
     if is_hit:
         await apply_blocklist_action(client, message, categories, user_id)
+        await review(client, message, text,
+                     "ban" if categories & SEVERE_CATEGORIES else "warn", "blocklist",
+                     categories=categories, is_edit=is_edit)
         conversation_tracker.record_message(
             message.chat.id, message.id, user_id, message.reply_to_message_id, text, True,
         )
         return
+
+    # --- 1b. "can't / didn't" replies inside a conversation about messages ---
+    # "Msg panna mudiyala" answering "enna pa inaiku un msg ye kaanom" is
+    # part of that conversation: no action. The same words out of the blue
+    # are checked by the classifier like anything else.
+    if is_cant_complaint(text):
+        parent_text = ""
+        if message.reply_to_message_id:
+            try:
+                parent = await client.get_messages(message.chat.id, message.reply_to_message_id)
+                parent_text = getattr(parent, "text", None) or getattr(parent, "caption", None) or ""
+            except Exception as e:
+                print(f"[ERROR] cant-context get_messages failed: {type(e).__name__}: {e}")
+        # the replied-to message: any DM word or topic word makes it related;
+        # recent chat from others (busy group): only clear topic words, 2 min
+        recent = conversation_tracker.get_recent_chat_texts(
+            message.chat.id, user_id, within_seconds=120, n=5,
+        )
+        if (context_is_about_messages([parent_text])
+                or context_is_about_messages(recent, include_dm_words=False)
+                or mentions_someones_message(text)):
+            await review(client, message, text, "none", "cant_reply_in_conversation",
+                         parent_text=parent_text, is_edit=is_edit)
+            conversation_tracker.record_message(
+                message.chat.id, message.id, user_id, message.reply_to_message_id, text, False,
+            )
+            return
 
     # --- 2. learned classifier for DM-solicitation intent ---
     label, total, hits = classify(text, weights)
@@ -280,21 +332,28 @@ async def moderate(client, message: Message, is_edit=False):
     has_real_context = any(feat != "__BIAS__" for _, feat, _ in hits)
 
     should_mute = False
+    reason = "below_threshold"
+    _parent_text = None
 
     if label == "warn":
         rescued, _parent_text = await try_reply_context_rescue(client, message, text, total)
         if not rescued:
             should_mute = True
+            reason = "confident_dm_ask"
+        else:
+            reason = "confident_but_reply_rescued"
     elif label == "uncertain" and anchor_present and total >= 0:
         # a bare anchor word (message/inbox/private/personal/add/etc.)
         # in an otherwise long, unrelated sentence should not, by
         # itself, trigger a mute.
         if word_count > 3 and not has_real_context:
             should_mute = False
+            reason = "lone_dm_word_in_long_sentence"
         else:
             rescued, _parent_text = await try_reply_context_rescue(client, message, text, total)
             if rescued:
                 should_mute = False
+                reason = "borderline_reply_rescued"
             else:
                 recent_texts = conversation_tracker.get_recent_texts(
                     message.chat.id, user_id, exclude_msg_id=message.id,
@@ -308,6 +367,7 @@ async def moderate(client, message: Message, is_edit=False):
                     _l, combined_total, _h = classify(combined, weights)
                     if combined_total < 0:
                         rescued_by_history = True
+                        reason = "borderline_own_history_rescued"
                         break
                 # untagged answer to someone else's recent question ("pvt
                 # or govt?" -> "nanba pvt la"): same test as the reply
@@ -321,8 +381,11 @@ async def moderate(client, message: Message, is_edit=False):
                         _l, combined_total, _h = classify(other_text + " " + text, weights)
                         if combined_total < total and combined_total < config.WARN_THRESHOLD * 0.5:
                             rescued_by_history = True
+                            reason = "borderline_chat_rescued"
                             break
                 should_mute = not rescued_by_history
+                if should_mute:
+                    reason = "borderline_dm_ask"
     elif (
         anchor_present
         and not has_real_context
@@ -340,6 +403,7 @@ async def moderate(client, message: Message, is_edit=False):
         # emergency, etc.) that genuinely explains it.
         rescued, _parent_text = await try_reply_context_rescue(client, message, text, total)
         should_mute = not rescued
+        reason = "bare_dm_word_reply" if should_mute else "bare_dm_word_reply_rescued"
 
     if should_mute:
         cmd_text = f".delmute {format_duration(config.DM_MUTE_HOURS)}h no dm"
@@ -350,10 +414,17 @@ async def moderate(client, message: Message, is_edit=False):
             f"[dm-solicitation{' (edited msg)' if is_edit else ''}] "
             f"user={user_id} score={total:.2f} -> {cmd_text}",
         )
+        await review(client, message, text, "mute", reason, score=total,
+                     parent_text=_parent_text, is_edit=is_edit)
         conversation_tracker.record_message(
             message.chat.id, message.id, user_id, message.reply_to_message_id, text, True,
         )
         return
+
+    if anchor_present:
+        # a DM-type word the bot let through: worth a human look later
+        await review(client, message, text, "none", reason, score=total,
+                     parent_text=_parent_text, is_edit=is_edit)
 
     # --- 3. duplicate-message spam detection (only reached for messages
     #     that are otherwise clean; never for edits — an edit isn't a
@@ -369,6 +440,7 @@ async def moderate(client, message: Message, is_edit=False):
             client,
             f"[spam-duplicate] user={user_id} -> {spam_cmd_text}",
         )
+        await review(client, message, text, "spam", "repeated_message", is_edit=is_edit)
         conversation_tracker.record_message(
             message.chat.id, message.id, user_id, message.reply_to_message_id, text, True,
         )
