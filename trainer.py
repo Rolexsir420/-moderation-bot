@@ -257,6 +257,15 @@ _SENSE_GUARDS = {
 # ("vaaangaaa") match their listed spelling automatically.
 _CANON = {}       # collapsed spelling -> canonical word
 _TAG_OF = {}      # collapsed word -> tag name
+_CANT_WORDS = set()     # "can't / didn't see" words (canonical)
+_GROUP_WORDS = set()    # "in the group / here / in vc" (collapsed)
+_TOPIC_WORDS = set()    # words that make a conversation about messaging
+_PRIVATE_WORDS = set()  # any of these cancels the group-location rule
+# anchors that mean "send a message" in general, so a group location next
+# to them makes them innocent; dm/pm/ib/inbox/private are private by nature
+_GROUP_RULE_ANCHORS = {"msg", "message", "text", "txt", "mes"}
+_LOC_FILLERS = {"la", "le", "lu", "ku", "il", "ile", "in", "ah", "a", "e", "ey", "ye", "le"}
+_REQUEST_VERBS = set()  # "do it / come" verbs that keep a DM ask a DM ask
 TANGLISH_LOADED = False
 
 
@@ -284,6 +293,18 @@ def _load_tanglish():
         _SELF_WORDS = {collapse_runs(w.lower()) for w in lex["self_words"]}
     if "request_words" in lex:
         _REQUEST_WORDS = {collapse_runs(w.lower()) for w in lex["request_words"]}
+    for w in lex.get("cant_words", []):
+        c = collapse_runs(w.lower())
+        _CANT_WORDS.add(_CANON.get(c, c))
+    for w in lex.get("request_verbs", []):
+        c = collapse_runs(w.lower())
+        _REQUEST_VERBS.add(_CANON.get(c, c))
+    for w in lex.get("topic_words", []):
+        _TOPIC_WORDS.add(collapse_runs(w.lower()))
+    for w in lex.get("group_words", []):
+        _GROUP_WORDS.add(collapse_runs(w.lower()))
+    for w in lex.get("private_words", []):
+        _PRIVATE_WORDS.add(collapse_runs(w.lower()))
     _SENSE_GUARDS = {
         "private": _SELF_WORDS | _REQUEST_WORDS,
         "personal": _SELF_WORDS | _REQUEST_WORDS,
@@ -353,6 +374,81 @@ def parent_explains(parent_text, text):
         sense = _SENSE_RULES.get(base)
         if sense and _has_sense(parent_tokens, sense):
             return True
+    return False
+
+
+def _anchor_base(tok):
+    """The anchor a single token stands for, or None (no time handling)."""
+    if tok in ANCHORS:
+        return tok
+    c = collapse_runs(tok)
+    if tok in ANCHOR_ALIASES or c in ANCHOR_ALIASES:
+        return ANCHOR_ALIASES.get(tok) or ANCHOR_ALIASES[c]
+    if c in ANCHORS:
+        return c
+    if c in _COLLAPSED_ANCHORS:
+        return _COLLAPSED_ANCHORS[c]
+    if tok in GLUED_COMPOUNDS:
+        return None  # "msgme", "dmme": aimed at me, never a complaint
+    return None
+
+
+def is_cant_complaint(text):
+    """
+    "msg panna mudiyala", "en txt pakkala", "un msg padika mudila": a DM
+    word next to a can't/didn't word (tanglish.json cant_words), with no
+    request verb in the message and not aimed at "me". Whether such a
+    message is innocent depends on the conversation around it (see
+    context_is_about_messages), so this only says "it's that kind".
+    """
+    if not _CANT_WORDS:
+        return False
+    tokens = [canonical(t) for t in merge_split_anchors(tokenize(text))[0]]
+    if any(collapse_runs(t) in _REQUEST_VERBS or t in _REQUEST_VERBS for t in tokens):
+        return False
+    for i, tok in enumerate(tokens):
+        if _anchor_base(tok) is None:
+            continue
+        if any(collapse_runs(tokens[j]) in _SELF_WORDS
+               for j in (i - 1, i + 1) if 0 <= j < len(tokens)):
+            return False
+        lo, hi = max(0, i - WINDOW), min(len(tokens), i + WINDOW + 1)
+        if any(collapse_runs(tokens[j]) in _CANT_WORDS or tokens[j] in _CANT_WORDS
+               for j in range(lo, hi) if j != i):
+            return True
+    return False
+
+
+_POSSESSIVE = {"un", "unga", "ungal", "ungaloda", "unoda", "unnoda", "your", "ur", "yours",
+               "avan", "avanoda", "ava", "avaloda", "avanga", "avangaloda", "his", "her",
+               "their", "ivan", "iva", "ivanga"}
+
+
+def mentions_someones_message(text):
+    """'un msg padika mudila', 'unga text varala': about someone's own
+    message, so it belongs to the conversation even without topic words."""
+    tokens = [canonical(t) for t in merge_split_anchors(tokenize(text))[0]]
+    for i, tok in enumerate(tokens):
+        if _anchor_base(tok) and i > 0 and collapse_runs(tokens[i - 1]) in {collapse_runs(w) for w in _POSSESSIVE}:
+            return True
+    return False
+
+
+def context_is_about_messages(context_texts, include_dm_words=True):
+    """
+    True if the conversation around a message is about messaging: the
+    replied-to message or recent messages from other people mention a
+    message, a reply, being missing/busy/online, etc. (tanglish.json
+    topic_words, plus any DM-type word). "enna pa inaiku un msg ye kaanom"
+    -> "Msg panna mudiyala" is part of that conversation.
+    """
+    for t in context_texts:
+        if not t:
+            continue
+        for tok in merge_split_anchors(tokenize(t))[0]:
+            c = collapse_runs(tok)
+            if (include_dm_words and _anchor_base(tok)) or c in _TOPIC_WORDS or canonical(tok) in _TOPIC_WORDS:
+                return True
     return False
 
 
@@ -448,6 +544,33 @@ def extract_features(text):
         )
         if sense_words and not aimed_at_me and _has_sense(token_set, sense_words):
             continue
+        # (can't/didn't complaints like "msg panna mudiyala" are NOT skipped
+        # here: whether they're innocent depends on the conversation, so
+        # bot.py decides with is_cant_complaint() + context_is_about_messages())
+        # sent IN THE GROUP: "group la msg pannuga", "inga msg pannu",
+        # "vc la msg on panungaa", "text here" — allowed. Needs the group
+        # word right beside the anchor (fillers like "la" skipped), and no
+        # private word anywhere ("grp la illa pvt la msg pannu" still counts).
+        if base in _GROUP_RULE_ANCHORS and _GROUP_WORDS and not aimed_at_me:
+            def _loc_near(step, max_between):
+                j, seen_words = i + step, 0
+                while 0 <= j < len(tokens) and seen_words <= max_between:
+                    c = collapse_runs(tokens[j])
+                    if c in _GROUP_WORDS or any(c.startswith(g) and len(g) >= 3 for g in _GROUP_WORDS):
+                        return True
+                    if c not in _LOC_FILLERS:
+                        seen_words += 1
+                    j += step
+                return False
+            has_private = any(collapse_runs(t) in _PRIVATE_WORDS
+                              or ANCHOR_ALIASES.get(collapse_runs(t)) == "private"
+                              for t in tokens)
+            # "Salem la yaradhu irukingala inga irundha message pannunga":
+            # asking around or naming a target means "inga" is a place, not
+            # the group, so the rule stays off
+            asks_around = any(tag_of(t) in ("ASK_AROUND", "TARGET") for t in tokens)
+            if (_loc_near(-1, 1) or _loc_near(1, 0)) and not has_private and not asks_around:
+                continue
 
         found.append((base, BIAS))
         if is_time_glued:
