@@ -46,7 +46,7 @@ import review_log
 from predict import classify, load_weights
 from trainer import (is_direct_ask, parent_explains, is_cant_complaint,
                      context_is_about_messages, mentions_someones_message, is_refusal,
-                     is_strong_ask)
+                     is_strong_ask, is_asking_around)
 
 weights = load_weights()
 
@@ -439,6 +439,18 @@ async def moderate(client, message: Message, is_edit=False):
         )
         await review(client, message, text, "mute", reason, score=total,
                      parent_text=_parent_text, is_edit=is_edit)
+        conversation_tracker.record_message(
+            message.chat.id, message.id, user_id, message.reply_to_message_id, text, True,
+        )
+        return
+
+    # --- 2b. asking around for women, without a DM ask: warn ---
+    # "Any girls here", "Any akka irukingala", "Any ladies for friendship"
+    if is_asking_around(text):
+        cmd_text = ".delwarn no dating txt"
+        await message.reply_text(cmd_text)
+        await log_to_admin(client, f"[asking-around] user={user_id} -> {cmd_text}")
+        await review(client, message, text, "warn", "asking_around_for_women", is_edit=is_edit)
         conversation_tracker.record_message(
             message.chat.id, message.id, user_id, message.reply_to_message_id, text, True,
         )
