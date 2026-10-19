@@ -36,7 +36,8 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 
 from pyrogram.raw.functions.updates import GetState
-from pyrogram import Client, filters
+from pyrogram import Client, filters, raw
+from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 
 import config
@@ -295,26 +296,116 @@ async def send_cmd(message, cmd_text):
 
 
 async def heartbeat():
-    global _acted
+    global _acted, _polled
     while True:
         await asyncio.sleep(600)
         chats = ", ".join(f"{cid}: {n}" for cid, n in sorted(_seen.items(), key=lambda x: -x[1])[:5]) or "none"
-        print(f"[heartbeat] last 10 min: messages seen {sum(_seen.values())} ({chats}) | actions {_acted} "
+        print(f"[heartbeat] last 10 min: messages seen {sum(_seen.values())} ({chats}) | fetched {_polled} | actions {_acted} "
               f"| watching {sorted(config.TARGET_CHAT_IDS) or 'ALL (discovery mode)'}", flush=True)
         if not _seen:
             # Telegram sends a session's updates only to the connection that
             # last asked for them; asking again pulls them back here
             try:
                 await app.invoke(GetState())
-                print("[heartbeat] no messages arrived - asked Telegram to resume updates", flush=True)
+                print("[heartbeat] no pushed messages - asked Telegram to resume pushing", flush=True)
             except Exception as e:
                 print(f"[ERROR] resume updates failed: {type(e).__name__}: {e}", flush=True)
         _seen.clear()
         _acted = 0
+        _polled = 0
+
+
+# --- message fetcher ---------------------------------------------------
+# In a busy group Telegram sometimes stops PUSHING messages and instead
+# sends "updateChannelTooLong" (= you're behind, fetch them yourself).
+# Pyrogram 2.0.106 ignores that, so the bot goes silent ("messages seen 0")
+# until restarted, and soon goes silent again. This task fetches the
+# target group's new messages itself every few seconds
+# (updates.getChannelDifference, the same call official apps use) and runs
+# them through the same handlers. Messages that also arrive by push are
+# handled only once (see _first_time).
+_handled = {}          # (chat_id, msg_id, is_edit) -> True, last ~5000
+_polled = 0
+
+
+def _first_time(chat_id, msg_id, is_edit, edit_date=None):
+    key = (chat_id, msg_id, is_edit, edit_date if is_edit else None)
+    if key in _handled:
+        return False
+    if len(_handled) >= 5000:
+        for k in list(_handled)[:2500]:
+            del _handled[k]
+    _handled[key] = True
+    return True
+
+
+async def fetch_channel_messages(client, chat_id):
+    global _polled
+    while True:
+        try:
+            peer = await client.resolve_peer(chat_id)
+            full = await client.invoke(raw.functions.channels.GetFullChannel(channel=peer))
+            pts = full.full_chat.pts
+            print(f"[fetcher] watching {chat_id} from pts {pts}", flush=True)
+            break
+        except Exception as e:
+            print(f"[ERROR] fetcher start {chat_id}: {type(e).__name__}: {e}", flush=True)
+            await asyncio.sleep(30)
+
+    while True:
+        wait = 4
+        try:
+            diff = await client.invoke(raw.functions.updates.GetChannelDifference(
+                channel=peer, filter=raw.types.ChannelMessagesFilterEmpty(),
+                pts=pts, limit=100, force=True))
+            if isinstance(diff, raw.types.updates.ChannelDifferenceEmpty):
+                pts = diff.pts
+                wait = min(max(diff.timeout or 4, 4), 10)
+            elif isinstance(diff, raw.types.updates.ChannelDifferenceTooLong):
+                # too far behind: skip ahead to now (old messages are not worth acting on)
+                pts = diff.dialog.pts
+                print(f"[fetcher] {chat_id} was too far behind, skipped to now", flush=True)
+            else:
+                pts = diff.pts
+                users = {u.id: u for u in diff.users}
+                chats = {c.id: c for c in diff.chats}
+                for rm in diff.new_messages:
+                    await _run_fetched(client, rm, users, chats, is_edit=False)
+                for upd in diff.other_updates:
+                    if isinstance(upd, raw.types.UpdateEditChannelMessage):
+                        await _run_fetched(client, upd.message, users, chats, is_edit=True)
+                if not diff.final:
+                    wait = 0
+        except FloodWait as e:
+            wait = e.value + 1
+        except Exception as e:
+            print(f"[ERROR] fetcher {chat_id}: {type(e).__name__}: {e}", flush=True)
+            wait = 15
+        await asyncio.sleep(wait)
+
+
+async def _run_fetched(client, raw_message, users, chats, is_edit):
+    global _polled
+    if not isinstance(raw_message, raw.types.Message):
+        return
+    try:
+        m = await Message._parse(client, raw_message, users, chats, replies=0)
+        if not await MODERATED(client, m):
+            return
+        _polled += 1
+        if is_edit:
+            await handle_edited_group_message(client, m)
+        else:
+            await handle_group_message(client, m)
+    except Exception as e:
+        print(f"[ERROR] fetched message {getattr(raw_message, 'id', '?')}: "
+              f"{type(e).__name__}: {e}", flush=True)
 
 
 @app.on_message(MODERATED)
 async def handle_group_message(client, message: Message):
+    if not _first_time(message.chat.id, message.id, False):
+        return
     await moderate(client, message, is_edit=False)
 
 
@@ -329,6 +420,8 @@ async def handle_edited_group_message(client, message: Message):
       - spam detection is skipped for edits (an edit isn't a new send).
     """
     if not getattr(message, "edit_date", None):
+        return
+    if not _first_time(message.chat.id, message.id, True, message.edit_date):
         return
     prev = conversation_tracker.get_record(message.chat.id, message.id)
     new_text = message.text or message.caption or ""
@@ -584,6 +677,8 @@ async def main():
         print(f"Userbot moderation online. Watching chats: "
               f"{sorted(config.TARGET_CHAT_IDS) or 'ALL (discovery mode)'}", flush=True)
         asyncio.create_task(heartbeat())
+        for _cid in config.TARGET_CHAT_IDS:
+            asyncio.create_task(fetch_channel_messages(app, _cid))
         await asyncio.Event().wait()
 
 
