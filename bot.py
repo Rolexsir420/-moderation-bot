@@ -35,6 +35,7 @@ Pipeline per message:
 import asyncio
 from datetime import datetime, timezone, timedelta
 
+from pyrogram.raw.functions.updates import GetState
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
@@ -300,6 +301,14 @@ async def heartbeat():
         chats = ", ".join(f"{cid}: {n}" for cid, n in sorted(_seen.items(), key=lambda x: -x[1])[:5]) or "none"
         print(f"[heartbeat] last 10 min: messages seen {sum(_seen.values())} ({chats}) | actions {_acted} "
               f"| watching {sorted(config.TARGET_CHAT_IDS) or 'ALL (discovery mode)'}", flush=True)
+        if not _seen:
+            # Telegram sends a session's updates only to the connection that
+            # last asked for them; asking again pulls them back here
+            try:
+                await app.invoke(GetState())
+                print("[heartbeat] no messages arrived - asked Telegram to resume updates", flush=True)
+            except Exception as e:
+                print(f"[ERROR] resume updates failed: {type(e).__name__}: {e}", flush=True)
         _seen.clear()
         _acted = 0
 
