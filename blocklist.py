@@ -55,6 +55,11 @@ CATEGORIES = {
         "married men", "married here", "married aunty", "married girl",
         "married lady", "married ladies", "married couple", "married cpl",
         "m married", "f married",
+        # Tamil / other target words ("married ponnuga irukingla" = asking
+        # around for married women); "ponnu" also matches ponnuga/ponnunga
+        "married ponnu", "married ponu", "married ponnunga", "married akka",
+        "married female", "married females", "married pen", "married penn",
+        "married aunties", "married wife", "married wifes",
         # "baby" only in flirting phrases: "baby ku kal vali" is a real baby.
         "hi baby", "hii baby", "hey baby", "baby vc", "baby vaa", "baby va",
         "my baby", "baby dm", "baby pm", "baby msg", "come baby", "sweet baby",
