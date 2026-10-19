@@ -157,16 +157,53 @@ async def apply_blocklist_action(client, message, categories, user_id):
         )
 
 
+_parent_cache = {}   # (chat_id, msg_id) -> parent text, last 500 lookups
+
+
+def _msg_text(m):
+    return (getattr(m, "text", None) or getattr(m, "caption", None) or "") if m else ""
+
+
+async def get_parent_text(client, message):
+    """
+    Text of the message this one replies to, or None if it isn't a reply
+    or the parent can't be read. Avoids Telegram calls wherever possible:
+    Pyrogram usually attaches the parent already (message.reply_to_message),
+    and our own chat history has recent messages. Only when neither has it
+    do we ask Telegram, once per message, so a busy group no longer hits
+    "Waiting for N seconds (required by channels.GetMessages)".
+    """
+    rid = message.reply_to_message_id
+    if not rid:
+        return None
+    key = (message.chat.id, message.id)
+    if key in _parent_cache:
+        return _parent_cache[key]
+    text = None
+    if getattr(message, "reply_to_message", None) is not None:
+        text = _msg_text(message.reply_to_message)
+    if text is None:
+        rec = conversation_tracker.get_record(message.chat.id, rid)
+        if rec is not None:
+            text = rec["text"] or ""
+    if text is None:
+        try:
+            text = _msg_text(await client.get_messages(message.chat.id, rid))
+        except Exception as e:
+            print(f"[ERROR] get_parent_text failed: {type(e).__name__}: {e}")
+            text = None
+    if len(_parent_cache) >= 500:
+        _parent_cache.clear()
+    _parent_cache[key] = text
+    return text
+
+
 async def review(client, message, text, action, reason, *, score=None,
                  categories=None, parent_text=None, is_edit=False):
     """Save this decision to the review log (never affects the decision)."""
     try:
-        if parent_text is None and message.reply_to_message_id:
-            try:
-                parent = await client.get_messages(message.chat.id, message.reply_to_message_id)
-                parent_text = getattr(parent, "text", None) or getattr(parent, "caption", None) or ""
-            except Exception:
-                parent_text = None
+        if parent_text is None:
+            parent_text = await get_parent_text(client, message)
         review_log.log(
             message=message, text=text, action=action, reason=reason, score=score,
             categories=categories, reply_to_text=parent_text, is_edit=is_edit,
@@ -201,11 +238,8 @@ async def try_reply_context_rescue(client, message, text, original_total):
         # "Pvt vaa" / "pm vaanga" ask directly; a reply to someone's
         # pvt-company message doesn't make that innocent.
         return False, None
-    try:
-        parent = await client.get_messages(message.chat.id, message.reply_to_message_id)
-        parent_text = (getattr(parent, "text", None) or getattr(parent, "caption", None) or "")
-    except Exception as e:
-        print(f"[ERROR] try_reply_context_rescue get_messages failed: {type(e).__name__}: {e}")
+    parent_text = await get_parent_text(client, message)
+    if parent_text is None:
         return False, None
     if not parent_text:
         return False, None
@@ -318,13 +352,7 @@ async def moderate(client, message: Message, is_edit=False):
     # part of that conversation: no action. The same words out of the blue
     # are checked by the classifier like anything else.
     if is_cant_complaint(text):
-        parent_text = ""
-        if message.reply_to_message_id:
-            try:
-                parent = await client.get_messages(message.chat.id, message.reply_to_message_id)
-                parent_text = getattr(parent, "text", None) or getattr(parent, "caption", None) or ""
-            except Exception as e:
-                print(f"[ERROR] cant-context get_messages failed: {type(e).__name__}: {e}")
+        parent_text = (await get_parent_text(client, message)) or ""
         # the replied-to message: any DM word or topic word makes it related;
         # recent chat from others (busy group): only clear topic words, 2 min
         recent = conversation_tracker.get_recent_chat_texts(
