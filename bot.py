@@ -679,10 +679,10 @@ async def main():
     async with app:
         await warm_peer_cache(app)
         try:
-            _wsize = os.path.getsize(config.WEIGHTS_PATH)
+            _wsize = os.path.getsize(config.MODEL_PATH)
         except OSError:
             _wsize = "MISSING"
-        print(f"Model: {config.WEIGHTS_PATH} ({_wsize} bytes) | data folder: {config.DATA_DIR}", flush=True)
+        print(f"Model: {config.MODEL_PATH} ({_wsize} bytes) | data folder: {config.DATA_DIR}", flush=True)
         print(f"Userbot moderation online. Watching chats: "
               f"{sorted(config.TARGET_CHAT_IDS) or 'ALL (discovery mode)'}", flush=True)
         asyncio.create_task(heartbeat())
