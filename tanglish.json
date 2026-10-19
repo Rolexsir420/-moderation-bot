@@ -14,7 +14,8 @@
     "topic_words: if the replied-to message or the last 10 messages (5 min) from others use one of these or any DM word, the conversation is about messaging, so a can't/didn't reply ('Msg panna mudiyala' to 'un msg ye kaanom') is allowed. Out of the blue, it's checked like any other message.",
     "neg_before / neg_after: a DM word right after a neg_before word ('don't pm me', 'no dm') or followed within 2 words by a neg_after word ('dm pannathinga', 'pm vendam') is a refusal or a rule, not a request, unless the message also has a request verb.",
     "reported_after: a DM word followed within 3 words by one of these describes what SOMEONE ELSE did ('antha ponnu enaku dm pannuchu', 'private msg panraanga'), a report, not a request.",
-    "sense_rules add: adding to a group/channel ('whatsapp group la add pannunga'); contact: business contact ('cake order venumna contact pannunga')."
+    "sense_rules add: adding to a group/channel ('whatsapp group la add pannunga'); contact: business contact ('cake order venumna contact pannunga').",
+    "asking_around: an ask word + a target word + a here/for-friendship word ('Any girls here', 'Any akka irukingala', 'Any ladies for friendship') is asking around for women: .delwarn 'no dating txt'. If the message also asks for DM, the DM mute wins."
   ],
   "spellings": {
     "pannunga": [
@@ -803,5 +804,66 @@
     "kekuranga",
     "koopudranga",
     "koopudran"
-  ]
+  ],
+  "asking_around": {
+    "ask": [
+      "any",
+      "anyone",
+      "any1",
+      "yaarachum",
+      "yarachum",
+      "yaravathu",
+      "yaravadhu",
+      "yaaravadhu",
+      "yaruna",
+      "yarum",
+      "yaaru",
+      "single"
+    ],
+    "target": [
+      "akka",
+      "akkas",
+      "aunty",
+      "aunties",
+      "anty",
+      "girl",
+      "girls",
+      "gal",
+      "gals",
+      "ponnu",
+      "ponnuga",
+      "ponnunga",
+      "ponu",
+      "ponuga",
+      "housewife",
+      "house wife",
+      "female",
+      "females",
+      "ladies",
+      "lady",
+      "women",
+      "womens",
+      "wife",
+      "bhabhi",
+      "chechi"
+    ],
+    "here": [
+      "irukingala",
+      "irukigala",
+      "irukinga",
+      "irukeengala",
+      "irukingla",
+      "irukiyala",
+      "iruka",
+      "irukanga",
+      "here",
+      "available",
+      "online",
+      "for friendship",
+      "for chat",
+      "for frndship",
+      "for frnd",
+      "for friends"
+    ]
+  }
 }
