@@ -586,6 +586,37 @@ def is_strong_ask(text):
     return False
 
 
+_ASKING_AROUND_RE = None
+
+
+def is_asking_around(text):
+    """
+    "Any girls here", "Any akka irukingala", "Any ladies for friendship",
+    "Single girl yaravathu irukigala": an ask word, a target word and a
+    here/for-friendship word close together (tanglish.json asking_around).
+    bot.py gives these .delwarn when they are not already a DM ask.
+    """
+    global _ASKING_AROUND_RE
+    if _ASKING_AROUND_RE is None:
+        import os
+        try:
+            lex = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                              "tanglish.json"), encoding="utf-8"))["asking_around"]
+        except Exception:
+            _ASKING_AROUND_RE = False
+            return False
+        alt = lambda ws: "(" + "|".join(re.escape(w) for w in sorted(ws, key=len, reverse=True)) + ")"
+        a, t, h = alt(lex["ask"]), alt(lex["target"]), alt(lex["here"])
+        # reversed order ("girl yaravathu irukigala") only with Tamil ask
+        # words: "akka any doubt iruka" is an ordinary question
+        a2 = alt([w for w in lex["ask"] if w not in ("any", "anyone", "any1", "single")])
+        _ASKING_AROUND_RE = re.compile(
+            rf"\b{a}\b.{{0,40}}\b{t}\b.{{0,40}}\b{h}\b|\b{t}\b.{{0,20}}\b{a2}\b.{{0,20}}\b{h}\b")
+    if not _ASKING_AROUND_RE:
+        return False
+    return bool(_ASKING_AROUND_RE.search(normalize_unicode(text).lower()))
+
+
 def context_is_about_messages(context_texts, include_dm_words=True):
     """
     True if the conversation around a message is about messaging: the
