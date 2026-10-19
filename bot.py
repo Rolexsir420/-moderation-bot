@@ -33,6 +33,7 @@ Pipeline per message:
 """
 
 import asyncio
+import os
 from datetime import datetime, timezone, timedelta
 
 from pyrogram.raw.functions.updates import GetState
@@ -48,7 +49,7 @@ import review_log
 from predict import classify, load_weights
 from trainer import (is_direct_ask, parent_explains, is_cant_complaint,
                      context_is_about_messages, mentions_someones_message, is_refusal,
-                     is_strong_ask, is_asking_around)
+                     is_strong_ask, is_asking_around, person_anchor_without_ask)
 
 weights = load_weights()
 
@@ -508,6 +509,9 @@ async def moderate(client, message: Message, is_edit=False):
 
     # --- 2. learned classifier for DM-solicitation intent ---
     label, total, hits = classify(text, weights)
+    if person_anchor_without_ask(text, {a for a, _f, _w in hits}):
+        # "Akka vaanga", "Hii akka", "Akka one help": just chat
+        label, total, hits = "uncertain", 0.0, []
     anchor_present = len(hits) > 0
     word_count = len(text.split())
     has_real_context = any(feat != "__BIAS__" for _, feat, _ in hits)
@@ -674,6 +678,11 @@ async def warm_peer_cache(client):
 async def main():
     async with app:
         await warm_peer_cache(app)
+        try:
+            _wsize = os.path.getsize(config.WEIGHTS_PATH)
+        except OSError:
+            _wsize = "MISSING"
+        print(f"Model: {config.WEIGHTS_PATH} ({_wsize} bytes) | data folder: {config.DATA_DIR}", flush=True)
         print(f"Userbot moderation online. Watching chats: "
               f"{sorted(config.TARGET_CHAT_IDS) or 'ALL (discovery mode)'}", flush=True)
         asyncio.create_task(heartbeat())
