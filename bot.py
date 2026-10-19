@@ -416,7 +416,10 @@ async def moderate(client, message: Message, is_edit=False):
                 for prior_text in recent_texts:
                     combined = prior_text + " " + text
                     _l, combined_total, _h = classify(combined, weights)
-                    if combined_total < 0:
+                    # only a real explanation counts: in a busy group a random
+                    # earlier line ("U from", "nanba pvt la") lowering the
+                    # combined score is not a reason to let "Dm" go
+                    if parent_explains(prior_text, text):
                         rescued_by_history = True
                         reason = "borderline_own_history_rescued"
                         break
@@ -430,7 +433,10 @@ async def moderate(client, message: Message, is_edit=False):
                         message.chat.id, user_id,
                     ):
                         _l, combined_total, _h = classify(other_text + " " + text, weights)
-                        if combined_total < total and combined_total < config.WARN_THRESHOLD * 0.5:
+                        # busy group: someone ELSE's random line ("U from")
+                        # must not excuse a bare "Dm"; only a message that
+                        # gives the word its ordinary meaning ("pvt or govt?")
+                        if parent_explains(other_text, text):
                             rescued_by_history = True
                             reason = "borderline_chat_rescued"
                             break
