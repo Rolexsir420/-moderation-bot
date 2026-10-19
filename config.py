@@ -71,6 +71,8 @@ DM_MUTE_HOURS = float(os.environ.get("DM_MUTE_HOURS", "3"))
 SPAM_WINDOW_HOURS = float(os.environ.get("SPAM_WINDOW_HOURS", "24"))
 SPAM_MUTE_HOURS = float(os.environ.get("SPAM_MUTE_HOURS", "3"))
 SPAM_REPEAT_THRESHOLD = int(os.environ.get("SPAM_REPEAT_THRESHOLD", "8"))
+# spam counts are saved to the Volume at most this often (seconds)
+SPAM_SAVE_SECONDS = float(os.environ.get("SPAM_SAVE_SECONDS", "30"))
 
 # --- Review log (decisions saved for the admin to label; never auto-trains) ---
 REVIEW_LOG_PATH = os.path.join(DATA_DIR, "review_log.jsonl")
@@ -79,4 +81,5 @@ REVIEW_LOG_MAX_MB = float(os.environ.get("REVIEW_LOG_MAX_MB", "5"))
 
 # --- Conversation / instigator / reply-context tracking ---
 CONTEXT_WINDOW_SECONDS = int(os.environ.get("CONTEXT_WINDOW_SECONDS", "300"))
-MAX_HISTORY_PER_CHAT = int(os.environ.get("MAX_HISTORY_PER_CHAT", "50"))
+# 300 messages is roughly the last 30 minutes in a 10-15k messages/day group
+MAX_HISTORY_PER_CHAT = int(os.environ.get("MAX_HISTORY_PER_CHAT", "300"))
