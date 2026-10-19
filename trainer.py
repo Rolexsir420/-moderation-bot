@@ -870,3 +870,30 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# "akka" / "aunty" are anchors because "aunty any pannunga" ("aunty, do it",
+# meaning DM) is an ask with no DM word in it. But "Akka vaanga", "Hii akka",
+# "Akka one help" are ordinary chat in a friend group. So when the ONLY
+# anchors are these person words, the message is checked as an ask only if
+# it also has a "do it" verb (pannu/pannunga/panuga...) or "pesalam/chat".
+PERSON_ANCHORS = {"akka", "aunty"}
+_PERSON_ASK_WORDS = {"pesalam", "pesalama", "pesulam", "pesulama", "chat"}
+
+
+def person_anchor_without_ask(text, anchors):
+    """True when the only anchors are akka/aunty and nothing asks for anything."""
+    if not anchors or not set(anchors) <= PERSON_ANCHORS:
+        return False
+    for raw_tok in tokenize(text):
+        tok = canonical(collapse_runs(raw_tok))
+        if tok in _PERSON_ASK_WORDS or raw_tok in _PERSON_ASK_WORDS:
+            return False
+        # calling out to women in general ("girls and aunties vaanga",
+        # "aunties come") is not chat with one akka
+        if raw_tok in ("aunties", "akkas") or (
+                _TAG_OF.get(tok) == "TARGET" and raw_tok not in PERSON_ANCHORS
+                and canonical(raw_tok) not in PERSON_ANCHORS and tok != "aka"):
+            return False
+        if tok.startswith(("pann", "panu")) and _TAG_OF.get(tok) not in ("PAST", "NEG"):
+            return False
+    return True
