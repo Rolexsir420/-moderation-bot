@@ -34,7 +34,13 @@ TARGET_CHAT_IDS = {
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# where trainer.py WRITES a freshly trained model
 WEIGHTS_PATH = os.path.join(DATA_DIR, "weights.json")
+# where the bot READS the model: the weights.json in the repo (GitHub), so a
+# new model is deployed just by updating it on GitHub; no Volume upload, and
+# a brand-new Railway account works straight away. MODEL_PATH overrides it.
+MODEL_PATH = os.environ.get("MODEL_PATH") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "weights.json")
 LABELED_DATA_PATH = os.path.join(DATA_DIR, "labeled_data.jsonl")
 STRIKES_PATH = os.path.join(DATA_DIR, "strikes.json")
 
