@@ -16,8 +16,11 @@ classifier's is_abusive decision for earlier messages in the window.
 """
 
 from collections import deque
+import json
+import os
 import re
 import time
+import unicodedata
 
 import config
 
@@ -27,7 +30,54 @@ history = {}
 # (chat_id, user_id) -> list of (normalized_text, timestamp), pruned by
 # SPAM_WINDOW_HOURS. Separate from `history` because spam detection needs
 # hours-long per-user memory, not just the last N messages in the chat.
+# Saved to DATA_DIR/spam_counts.json (the Railway Volume) at most every
+# SPAM_SAVE_SECONDS, and loaded on startup, so a redeploy no longer resets
+# everyone's repeat count to zero.
 _spam_history = {}
+_SPAM_PATH = os.path.join(config.DATA_DIR, "spam_counts.json")
+_last_spam_save = 0.0
+
+
+def _load_spam_history():
+    try:
+        with open(_SPAM_PATH, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        return
+    now = time.time()
+    window = config.SPAM_WINDOW_HOURS * 3600
+    for key, entries in raw.items():
+        try:
+            chat_id, user_id = (int(x) for x in key.split("|"))
+        except ValueError:
+            continue
+        kept = [(t, ts) for t, ts in entries if now - ts <= window]
+        if kept:
+            _spam_history[(chat_id, user_id)] = kept
+
+
+def _save_spam_history(force=False):
+    global _last_spam_save
+    now = time.time()
+    if not force and now - _last_spam_save < config.SPAM_SAVE_SECONDS:
+        return
+    _last_spam_save = now
+    window = config.SPAM_WINDOW_HOURS * 3600
+    data = {}
+    for (chat_id, user_id), entries in _spam_history.items():
+        kept = [[t, ts] for t, ts in entries if now - ts <= window]
+        if kept:
+            data[f"{chat_id}|{user_id}"] = kept
+    try:
+        tmp = _SPAM_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, _SPAM_PATH)
+    except OSError as e:
+        print(f"[ERROR] saving spam counts failed: {type(e).__name__}: {e}")
+
+
+_load_spam_history()
 
 
 def record_message(chat_id, msg_id, user_id, reply_to_id, text, is_abusive):
@@ -155,10 +205,28 @@ def get_recent_chat_texts(chat_id, exclude_user_id, within_seconds=120, n=5):
 
 
 _WS_RE = re.compile(r"\s+")
+_RUNS_RE = re.compile(r"(.)\1+")
 
 
 def _normalize_for_spam_check(text):
-    return _WS_RE.sub(" ", (text or "").strip().lower())
+    """
+    Spam comparison key. Ignores what spammers change to dodge an exact
+    match: case, spaces, emoji and symbols, punctuation, fancy fonts and
+    stretched letters. "Join our channel 🔥", "JOIN our channel!!" and
+    "Joinnn our channel 😍" all become "join our channel". Tamil and other
+    scripts keep their letters and vowel signs.
+    """
+    text = unicodedata.normalize("NFKC", text or "").lower()
+    kept = []
+    for ch in text:
+        cat = unicodedata.category(ch)
+        if cat[0] in ("S", "P", "C"):      # symbols/emoji, punctuation, control
+            kept.append(" ")
+        else:
+            kept.append(ch)
+    text = "".join(kept)
+    text = _RUNS_RE.sub(r"\1", text)       # "joinnnn" -> "join", "!!!" gone already
+    return _WS_RE.sub(" ", text).strip()
 
 
 # Ordinary chit-chat that naturally repeats many times a day in any
@@ -179,6 +247,11 @@ COMMON_FILLERS = {
 }
 
 
+# same key form as messages ("good morning" -> "god morning"), so the
+# filler exemption still matches after letter-run collapsing
+_FILLERS_NORMALIZED = {_normalize_for_spam_check(f) for f in COMMON_FILLERS}
+
+
 def check_and_record_duplicate(chat_id, user_id, text):
     """
     Returns True once this exact (normalized) text has been sent by this
@@ -188,8 +261,10 @@ def check_and_record_duplicate(chat_id, user_id, text):
     so the window keeps sliding forward.
 
     Two deliberate limits on what counts as spam:
-      - exact-match only, no fuzzy matching, to avoid false positives on
-        messages that are merely similar in topic.
+      - near-exact match only: case, spaces, emoji, punctuation and
+        stretched letters are ignored (see _normalize_for_spam_check), but
+        the words themselves must be the same, so messages that are merely
+        similar in topic never count together.
       - a single word, or a common greeting/filler phrase (COMMON_FILLERS
         above), never counts as spam no matter how many times it repeats
         — ordinary chat is full of people saying "hi"/"ok"/"mm" a dozen
@@ -202,7 +277,7 @@ def check_and_record_duplicate(chat_id, user_id, text):
     if not normalized:
         return False
 
-    if len(normalized.split()) <= 1 or normalized in COMMON_FILLERS:
+    if len(normalized.split()) <= 1 or normalized in _FILLERS_NORMALIZED:
         return False
 
     key = (chat_id, user_id)
@@ -215,6 +290,7 @@ def check_and_record_duplicate(chat_id, user_id, text):
 
     matching_count = sum(1 for (t, ts) in entries if t == normalized)
     entries.append((normalized, now))
+    _save_spam_history()
 
     # +1 to count the current message itself, not just prior occurrences
     return (matching_count + 1) >= config.SPAM_REPEAT_THRESHOLD
