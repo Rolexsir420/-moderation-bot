@@ -127,7 +127,7 @@ async def apply_blocklist_action(client, message, categories, user_id):
     reason = reason_for_categories(categories)
     is_severe = bool(categories & SEVERE_CATEGORIES)
     cmd_text = f".delban {reason}" if is_severe else f".delwarn {reason}"
-    await message.reply_text(cmd_text)
+    await send_cmd(message, cmd_text)
     # strike count kept for the admin log/audit trail only — for ordinary
     # blocklist hits it never changes which command gets sent (always
     # .delwarn). Severe hits escalate to .delban regardless of strikes.
@@ -266,6 +266,42 @@ async def try_reply_context_rescue(client, message, text, original_total):
 # filters.text alone skipped captions, so "dm me" written on a photo was
 # never checked.
 MODERATED = filters.group & (filters.text | filters.caption) & ~filters.bot
+
+
+# --- heartbeat: proves messages are actually arriving -----------------
+# Every 10 minutes the log shows how many group messages Telegram delivered
+# (per chat id) and how many the bot acted on. "seen 0" while the group is
+# busy means Telegram isn't sending updates; a chat id that isn't in
+# TARGET_CHAT_IDS means the bot is ignoring that group on purpose.
+_seen = {}
+_acted = 0
+
+
+@app.on_message(filters.group, group=-1)
+async def _count_seen(client, message: Message):
+    _seen[message.chat.id] = _seen.get(message.chat.id, 0) + 1
+
+
+async def send_cmd(message, cmd_text):
+    """Reply with the Oreo Queen command; a failure is printed, not hidden."""
+    global _acted
+    try:
+        await message.reply_text(cmd_text)
+        _acted += 1
+    except Exception as e:
+        print(f"[ERROR] could not send '{cmd_text}' in chat {message.chat.id}: "
+              f"{type(e).__name__}: {e}", flush=True)
+
+
+async def heartbeat():
+    global _acted
+    while True:
+        await asyncio.sleep(600)
+        chats = ", ".join(f"{cid}: {n}" for cid, n in sorted(_seen.items(), key=lambda x: -x[1])[:5]) or "none"
+        print(f"[heartbeat] last 10 min: messages seen {sum(_seen.values())} ({chats}) | actions {_acted} "
+              f"| watching {sorted(config.TARGET_CHAT_IDS) or 'ALL (discovery mode)'}", flush=True)
+        _seen.clear()
+        _acted = 0
 
 
 @app.on_message(MODERATED)
@@ -464,7 +500,7 @@ async def moderate(client, message: Message, is_edit=False):
 
     if should_mute:
         cmd_text = f".delmute {format_duration(config.DM_MUTE_HOURS)}h no dm"
-        await message.reply_text(cmd_text)
+        await send_cmd(message, cmd_text)
         is_abusive = True
         await log_to_admin(
             client,
@@ -482,7 +518,7 @@ async def moderate(client, message: Message, is_edit=False):
     # "Any girls here", "Any akka irukingala", "Any ladies for friendship"
     if is_asking_around(text):
         cmd_text = ".delwarn no dating txt"
-        await message.reply_text(cmd_text)
+        await send_cmd(message, cmd_text)
         await log_to_admin(client, f"[asking-around] user={user_id} -> {cmd_text}")
         await review(client, message, text, "warn", "asking_around_for_women", is_edit=is_edit)
         conversation_tracker.record_message(
@@ -503,7 +539,7 @@ async def moderate(client, message: Message, is_edit=False):
     )
     if is_duplicate:
         spam_cmd_text = f".delmute {format_duration(config.SPAM_MUTE_HOURS)}h no spam"
-        await message.reply_text(spam_cmd_text)
+        await send_cmd(message, spam_cmd_text)
         is_abusive = True
         await log_to_admin(
             client,
@@ -536,7 +572,9 @@ async def warm_peer_cache(client):
 async def main():
     async with app:
         await warm_peer_cache(app)
-        print("Userbot moderation online.")
+        print(f"Userbot moderation online. Watching chats: "
+              f"{sorted(config.TARGET_CHAT_IDS) or 'ALL (discovery mode)'}", flush=True)
+        asyncio.create_task(heartbeat())
         await asyncio.Event().wait()
 
 
