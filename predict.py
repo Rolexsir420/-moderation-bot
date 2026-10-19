@@ -47,6 +47,18 @@ def load_weights(path=None):
     import os
     path = path or config.WEIGHTS_PATH
     if not os.path.exists(path):
-        return {}
+        # first start on an empty Volume: copy the model shipped in the repo
+        # (GitHub weights.json) into the data folder and use it
+        shipped = os.path.join(os.path.dirname(os.path.abspath(__file__)), "weights.json")
+        if os.path.abspath(shipped) == os.path.abspath(path) or not os.path.exists(shipped):
+            print(f"[ERROR] no model found at {path}")
+            return {}
+        import shutil
+        try:
+            shutil.copyfile(shipped, path)
+            print(f"[setup] copied model from repo to {path}")
+        except OSError as e:
+            print(f"[ERROR] could not copy model to {path}: {e}; using repo copy")
+            path = shipped
     with open(path) as f:
         return json.load(f)
