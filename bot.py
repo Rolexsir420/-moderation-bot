@@ -558,7 +558,11 @@ async def moderate(client, message: Message, is_edit=False):
         # "Akka vaanga", "Hii akka", "Akka one help": just chat
         label, total, hits = "uncertain", 0.0, []
     anchor_present = len(hits) > 0
-    word_count = len(text.split())
+    # count words the way the bot READS them: "A d. D panringala" is 2
+    # words ("add panringala"), not 4 pieces — otherwise a spaced-out
+    # "add" looks like a stray word in a long sentence and is skipped
+    import trainer as _tr
+    word_count = min(len(text.split()), len(_tr.merge_split_anchors(_tr.tokenize(text))[0]) or len(text.split()))
     has_real_context = any(feat != "__BIAS__" for _, feat, _ in hits)
 
     should_mute = False
