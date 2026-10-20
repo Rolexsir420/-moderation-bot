@@ -752,7 +752,7 @@ def is_refusal(text):
     # "personal ah pesa mudiyathu", "dm panna mudiyathu" = can't/won't = no.
     # Checked on the raw words: the spelling list folds "mudiyathu" into
     # "mudiyala" ("couldn't"), which needs the conversation check instead.
-    _raw = [collapse_runs(t) for t in tokenize(text)]
+    _raw = [collapse_runs(t) for t in merge_split_anchors(tokenize(text))[0]]
     _asks = any(canonical(t) in _REQUEST_VERBS or tag_of(canonical(t)) == "REQUEST" for t in _raw)
     for _i, _t in enumerate(_raw if not _asks else []):
         if _anchor_base(_t) and not (_i + 1 < len(_raw) and _raw[_i + 1] in _SELF_WORDS) and any(
