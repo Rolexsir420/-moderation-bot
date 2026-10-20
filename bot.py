@@ -49,7 +49,7 @@ import review_log
 from predict import classify, load_weights
 from trainer import (is_direct_ask, parent_explains, is_cant_complaint,
                      context_is_about_messages, mentions_someones_message, is_refusal,
-                     is_strong_ask, is_asking_around, person_anchor_without_ask)
+                     is_strong_ask, is_asking_around, person_anchor_without_ask, is_moderation_talk, asks_for_me, innocent_reading)
 
 weights = load_weights()
 
@@ -68,7 +68,12 @@ CATEGORY_REASONS = [
     ("service_paid", "no scam/paid content"),
     ("scam", "no scam/paid content"),
     ("caste_hate", "no hate speech"),
+    ("fake_id_accusation", "dont call members fake id - you have no permission to judge anyones identity"),
+    ("group_exchange", "no group exchange"),
 ]
+
+# blocklist categories that get a mute instead of a warn: category -> hours
+MUTE_CATEGORIES = {"fake_id_accusation": 3, "group_exchange": 3}
 
 # Categories that are an immediate .delban (not .delwarn) plus a loud
 # admin alert, because bot action alone is not an adequate response to
@@ -129,7 +134,14 @@ async def log_to_admin(client, text):
 async def apply_blocklist_action(client, message, categories, user_id):
     reason = reason_for_categories(categories)
     is_severe = bool(categories & SEVERE_CATEGORIES)
-    cmd_text = f".delban {reason}" if is_severe else f".delwarn {reason}"
+    mute_cats = [c for c, _r in CATEGORY_REASONS if c in categories and c in MUTE_CATEGORIES]
+    if is_severe:
+        cmd_text = f".delban {reason}"
+    elif mute_cats:
+        cat = mute_cats[0]
+        cmd_text = f".delmute {format_duration(MUTE_CATEGORIES[cat])}h {dict(CATEGORY_REASONS)[cat]}"
+    else:
+        cmd_text = f".delwarn {reason}"
     await send_cmd(message, cmd_text)
     # strike count kept for the admin log/audit trail only — for ordinary
     # blocklist hits it never changes which command gets sent (always
@@ -432,6 +444,33 @@ async def handle_edited_group_message(client, message: Message):
     await moderate(client, message, is_edit=True)
 
 
+# --- group admins are never moderated -----------------------------------
+# Admins post the rules ("PM - Private Message ... Fake ID ...") and
+# warnings ("yaarum DM pannatheenga") full of flagged words. Admin ids are
+# fetched from Telegram and refreshed every 30 minutes.
+_admin_cache = {}   # chat_id -> (fetched_at, {user ids})
+
+
+async def get_admin_ids(client, chat_id):
+    import time
+    from pyrogram.enums import ChatMembersFilter
+    now = time.time()
+    cached = _admin_cache.get(chat_id)
+    if cached and now - cached[0] < 1800:
+        return cached[1]
+    ids = set()
+    try:
+        async for m in client.get_chat_members(chat_id, filter=ChatMembersFilter.ADMINISTRATORS):
+            if m.user:
+                ids.add(m.user.id)
+        _admin_cache[chat_id] = (now, ids)
+    except Exception as e:
+        print(f"[ERROR] could not load admins of {chat_id}: {type(e).__name__}: {e}", flush=True)
+        ids = cached[1] if cached else set()
+        _admin_cache[chat_id] = (now - 1500, ids)   # retry in ~5 min
+    return ids
+
+
 async def moderate(client, message: Message, is_edit=False):
     user = message.from_user
 
@@ -463,6 +502,12 @@ async def moderate(client, message: Message, is_edit=False):
     if not text.strip():
         return
     user_id = user.id if user else None
+    if user_id is not None and user_id in await get_admin_ids(client, message.chat.id):
+        # still remembered as context for others' messages, never actioned
+        conversation_tracker.record_message(
+            message.chat.id, message.id, user_id, message.reply_to_message_id, text, False,
+        )
+        return
     is_abusive = False
 
     # --- 1. hardcoded blocklist, checked first and deterministically ---
@@ -525,6 +570,17 @@ async def moderate(client, message: Message, is_edit=False):
         # other words in the sentence pull the learned score down
         should_mute = True
         reason = "strong_dm_ask"
+    elif innocent_reading(text):
+        # "Msg in English", "Neriya mssg", "yaru msg kaano", "ping her"
+        label, total, hits = "uncertain", 0.0, []
+        anchor_present, has_real_context = False, False
+        reason = "innocent_" + innocent_reading(text)
+    elif is_moderation_talk(text):
+        # "dm solla villai, etharku mute?" — talking ABOUT the bot/mutes:
+        # no DM action (spam and asking-around checks still run below)
+        label, total, hits = "uncertain", 0.0, []
+        anchor_present, has_real_context = False, False
+        reason = "moderation_talk"
 
     if should_mute:
         pass
@@ -570,7 +626,7 @@ async def moderate(client, message: Message, is_edit=False):
                 # rescue, against what OTHER people said in the last 2 min.
                 # Only reachable for borderline ("uncertain") scores, so a
                 # confident ask like "Pvt vaa" is never rescued this way.
-                if not rescued_by_history and not is_direct_ask(text):
+                if not rescued_by_history and not is_direct_ask(text) and not asks_for_me(text):
                     for other_text in conversation_tracker.get_recent_chat_texts(
                         message.chat.id, user_id,
                     ):
