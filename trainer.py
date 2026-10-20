@@ -68,6 +68,10 @@ ANCHOR_ALIASES = {
     "personel": "personal",
     "personaly": "personal",
     "personally": "personal",
+    "prsl": "personal",
+    "persl": "personal",
+    "prsel": "personal",
+    "prsnal": "personal",
     # common misspellings of msg ("Mesgpanu" = msg pannu)
     "mesg": "msg",
     "mesge": "msg",
@@ -225,6 +229,12 @@ def tokenize(text):
     # are KEPT SEPARATE.
     text = normalize_unicode(tamil_to_tanglish(text))
     text = text.lower()
+    # "Come on d@", "d@ me", "p@ la vaa": @ hiding the m of dm/pm. Nobody types
+    # "da" (dude) as "d@", so a d@/p@ standing as its own word is a disguise.
+    # "D @ pannunga" (with a space) only counts when a request word follows,
+    # and "d@rling", "id@gmail" are untouched.
+    text = _AT_DM_WORD_RE.sub(lambda m: m.group(1) + "m", text)
+    text = _AT_DM_RE.sub(lambda m: m.group(1) + "m", text)
     tokens = []
     for chunk in _WS_SPLIT_RE.split(text.strip()):
         pieces = [p for p in _PUNCT_SPLIT_RE.split(chunk) if p]
@@ -236,6 +246,10 @@ def tokenize(text):
             tokens.extend(pieces)
     return read_like_human(tokens)
 
+
+_AT_DM_WORD_RE = re.compile(r"(?<![a-z0-9@._])([dp])@(?![a-z0-9@_.])")
+_AT_DM_RE = re.compile(
+    r"(?<![a-z0-9])([dp])\s?@(?=\s+(?:me+|mi|pan+\w*|pand\w*|anup\w*|pl[sz]|please|la+|le|ku|pes\w*|send|sei\w*|podu|pod\w*|kudu\w*|now|fast)(?![a-z]))")
 
 # --- Reading like a person ---------------------------------------------
 # People recognise a word by its SHAPE: "persnL", "prsnl", "porsnel" are all
@@ -333,6 +347,12 @@ def read_like_human(tokens):
         if re.sub(r"(.)\1+", r"\1", out[k]) in _SEITHI and \
                 re.sub(r"(.)\1+", r"\1", out[k + 1]).startswith(_SEND_STEMS):
             out[k] = "msg"
+    # "prsl ct", "pvt cht" = personal/private chat. "ct" alone stays as is
+    # (CT scan, city), it is read as chat only right after one of those.
+    for k in range(1, len(out)):
+        if out[k] in ("ct", "cht", "chet", "chtt") and \
+                ANCHOR_ALIASES.get(out[k - 1], out[k - 1]) in ("personal", "private"):
+            out[k] = "chat"
     return out
 
 
