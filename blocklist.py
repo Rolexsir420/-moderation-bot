@@ -108,13 +108,28 @@ CATEGORIES = {
         "சுன்னி", "கூத்தி", "பூண்டை",
     },
     "clothing_body": {
-        "bra", "panty", "jatti",
+        "bra", "panty", "jatti", "jatty", "jaddi", "jattiya",
+        # "jetty" = jatti (inner wear) here, but also a pier ("Marina jetty"):
+        # only in body phrases
+        "jetty smell", "jetty potu", "jetty kalate", "jetty kalati", "akka jetty",
+        "aunty jetty", "un jetty", "unga jetty", "jetty pic", "jetty photo",
+        "jetty kaatu", "jetty color", "jetty colour", "jettiya",
     },
     "service_paid": {
         "service", "paid",
     },
-    "scam": {
-        "fake id",
+    "scam": set(),
+    # group rule 3: never call a member "Fake ID" -> .delmute 3h (bot.py)
+    "fake_id_accusation": {
+        "fake id", "fake ids", "fakeid", "fakeids", "fake idu", "fake ida",
+        "fake account", "fake acc", "fake accnt", "fake profile",
+        "ஃபேக் ஐடி", "பேக் ஐடி", "fake ஐடி",
+    },
+    # swapping (18+) groups -> .delmute 3h (bot.py)
+    "group_exchange": {
+        "group exchange", "grp exchange", "groups exchange", "grps exchange",
+        "exchange group", "exchange grp", "exchange groups", "group xchange",
+        "grp xchange",
     },
     "caste_hate": {
         "keel", "jaathi",
@@ -260,6 +275,51 @@ def _phrase_hit(term, lowered):
 _SAFE_PHRASES_RE = re.compile(r"(?<![a-z0-9])cpl\s+of(?![a-z0-9])")
 
 
+# Disguised CSAM spam: "𝐃*𝐌 𝐅𝐎𝐑 𝐂𝐇!!𝐃 𝐏𝐑𝐎*𝐍", "ch1ld pr0n", "kids nudes".
+# Split by whitespace first, strip symbols inside each chunk, undo leet
+# ("!"/"1" -> i, "0" -> o) and repeated letters, then look for a child word
+# followed (within 2 words) by a porn word as a WHOLE word, so
+# "kids pronunciation" or "child video call" never match.
+_CSAM_LEET = str.maketrans({"!": "i", "1": "i", "|": "i", "0": "o", "3": "e",
+                            "4": "a", "@": "a", "$": "s", "5": "s", "7": "t"})
+_CSAM_CHILD = {"child", "chid", "chld", "chlid", "childs", "children", "kid",
+               "kids", "kiddie", "kidie", "minor", "minors", "underage", "baby"}
+_CSAM_PORN = {"porn", "pron", "prn", "porno", "prono", "xxx", "nude", "nudes",
+              "sexvideo", "sexvideos"}
+
+
+def _csam_chunks(text):
+    out = []
+    for chunk in text.lower().split():
+        c = re.sub(r"[^a-z]", "", chunk.translate(_CSAM_LEET))
+        c = "xxx" if re.fullmatch(r"x{2,}", c) else re.sub(r"(.)\1+", r"\1", c)
+        if c:
+            out.append(c)
+    # re-join letter-by-letter spellings: "c h i l d" -> "child"
+    joined, i = [], 0
+    while i < len(out):
+        j = i
+        while j < len(out) and len(out[j]) == 1:
+            j += 1
+        if j - i >= 3:
+            joined.append("".join(out[i:j])); i = j
+        else:
+            joined.append(out[i]); i += 1
+    return joined
+
+
+def is_csam_spam(text):
+    if not text:
+        return False
+    ch = _csam_chunks(_normalize_unicode(text))
+    for i, w in enumerate(ch):
+        if any(w.startswith(c) and w[len(c):] in _CSAM_PORN for c in _CSAM_CHILD):
+            return True  # glued: "childporn", "kidsnudes"
+        if w in _CSAM_CHILD and any(x in _CSAM_PORN for x in ch[i + 1:i + 3]):
+            return True
+    return False
+
+
 def check_text(text):
     """
     Returns (is_hit, categories) where categories is a set of category
@@ -267,6 +327,9 @@ def check_text(text):
     """
     if not text:
         return False, set()
+
+    if is_csam_spam(text):
+        return True, {"severe_exploitation"}
 
     text = _normalize_unicode(text)
     lowered = _SAFE_PHRASES_RE.sub(" ", text.lower())
