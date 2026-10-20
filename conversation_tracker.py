@@ -252,7 +252,7 @@ COMMON_FILLERS = {
 _FILLERS_NORMALIZED = {_normalize_for_spam_check(f) for f in COMMON_FILLERS}
 
 
-def check_and_record_duplicate(chat_id, user_id, text):
+def check_and_record_duplicate(chat_id, user_id, text, promo_like=True):
     """
     Returns True once this exact (normalized) text has been sent by this
     same user in this chat at least SPAM_REPEAT_THRESHOLD times within
@@ -288,9 +288,41 @@ def check_and_record_duplicate(chat_id, user_id, text):
     # prune anything outside the window
     entries[:] = [(t, ts) for (t, ts) in entries if now - ts <= window_seconds]
 
-    matching_count = sum(1 for (t, ts) in entries if t == normalized)
+    # Everyday sentences ("Summa than ninga", "Enna pandringa", "Good
+    # morning friends") are never spam here, however often they repeat:
+    # flooding is handled by the Group Help bot. Only messages that look
+    # like spam/promotion (bot.py decides: links, @usernames, numbers, DM
+    # words, "anyone for friendship"-style seeking, long pasted text) count,
+    # SPAM_REPEAT_THRESHOLD times within SPAM_WINDOW_HOURS.
+    if not promo_like:
+        return False
+    window, threshold = window_seconds, config.SPAM_REPEAT_THRESHOLD
+    matching_count = sum(1 for (t, ts) in entries if t == normalized and now - ts <= window)
     entries.append((normalized, now))
     _save_spam_history()
 
     # +1 to count the current message itself, not just prior occurrences
-    return (matching_count + 1) >= config.SPAM_REPEAT_THRESHOLD
+    return (matching_count + 1) >= threshold
+
+
+_PROMO_RE = re.compile(r"https?://|t\.me|www\.|@\w|\d{3,}", re.I)
+
+
+_SEEKING_RE = re.compile(
+    r"(?<![a-z])(any ?one|anybody|any1|looking|loking|lookin|need|want|searching|wanted)(?![a-z])"
+    r".*(?<![a-z])(friend\w*|frnd\w*|fren\w*|girl\w*|boy\w*|aunty|aunties|partner|gf|bf|"
+    r"chat\w*|talk\w*|relationship|single|age)(?![a-z])", re.I)
+
+
+_AD_WORDS_RE = re.compile(
+    r"(?<![a-z])(join|channel|subscribe|subscribers|follow|followers|promo\w*|offer|offers|"
+    r"discount|earn|earning|income|invest\w*|crypto|bitcoin|trading|loan|free|giveaway|"
+    r"sale|buy|sell|selling|order|whatsapp|insta|instagram|youtube|link|links)(?![a-z])", re.I)
+
+
+def looks_promo(raw_text, has_dm_word=False):
+    """Spam-shaped: links, @usernames, numbers, a DM word, friend-seeking,
+    or a long message (7+ words) pasted again and again."""
+    t = raw_text or ""
+    return bool(_PROMO_RE.search(t) or _SEEKING_RE.search(t) or _AD_WORDS_RE.search(t) or has_dm_word
+                or len(_normalize_for_spam_check(t).split()) >= 7)
