@@ -1113,6 +1113,17 @@ def split_glued(tokens, flags):
                     out_flags += [fl, False]
                     done = True
                 break
+            # a misspelt DM word glued to a request: "inbxplzz" = inbx + plz,
+            # "prsnlpesalama" = personal + pesalama (shape-read like tokenize)
+            for cut in range(3, len(c) - 1) if not done else ():
+                base = _read_word(c[:cut])
+                rest_canon = canonical(c[cut:])
+                if base in ANCHORS and (rest_canon in _REQUEST_VERBS or tag_of(rest_canon) == "REQUEST"
+                                        or c[cut:] in _SELF_WORDS or rest_canon in _SELF_WORDS):
+                    out += [base, rest_canon]
+                    out_flags += [fl, False]
+                    done = True
+                    break
         if not done and len(tok) >= 4 and tok not in ANCHORS:
             c = collapse_runs(tok)
             for w in sorted(_REQUEST_WORDS | _REQUEST_VERBS, key=len, reverse=True):
