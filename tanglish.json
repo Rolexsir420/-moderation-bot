@@ -31,7 +31,14 @@
       "panunge",
       "pannungale",
       "panungale",
-      "pannugale"
+      "pannugale",
+      "pannungaa",
+      "panungaa",
+      "pannungada",
+      "pannugga",
+      "panuka",
+      "pannuka",
+      "pannugaaa"
     ],
     "pannu": [
       "pannu",
@@ -51,7 +58,11 @@
       "waga",
       "wagga",
       "wanga",
-      "wangga"
+      "wangga",
+      "vainga",
+      "vaanka",
+      "vanka",
+      "vangaa"
     ],
     "vaa": [
       "vaa",
@@ -64,7 +75,19 @@
       "pesulama",
       "pesalaama",
       "pesalaam",
-      "pesalamaa"
+      "pesalamaa",
+      "peslam",
+      "pasalam",
+      "peasalam",
+      "pesaalam",
+      "peslama",
+      "pesallama",
+      "pesallamaa",
+      "peslamamaa",
+      "pesalamma",
+      "peasalama",
+      "pasalama",
+      "pesalaamaa"
     ],
     "irukingala": [
       "irukingala",
@@ -129,7 +152,10 @@
       "vendam",
       "venda",
       "vendaam",
-      "venam"
+      "venam",
+      "venaam",
+      "veenaam",
+      "vandam"
     ],
     "koodathu": [
       "koodathu",
@@ -179,7 +205,12 @@
       "mudiyadhu",
       "mudiyaathu",
       "mudiyadu",
-      "mudiyalla"
+      "mudiyalla",
+      "mudiala",
+      "mudiyale",
+      "mudeyala",
+      "mudiyalaye",
+      "mudiyalaa"
     ],
     "theriyala": [
       "theriyala",
@@ -224,6 +255,20 @@
       "poghala",
       "pogalai",
       "pogathu"
+    ],
+    "pesunga": [
+      "pesungada",
+      "pesungaa"
+    ],
+    "sollunga": [
+      "solunga",
+      "solluga",
+      "soluga",
+      "sollungada"
+    ],
+    "venum": [
+      "vennum",
+      "veanum"
     ]
   },
   "tags": {
@@ -356,7 +401,9 @@
       "property",
       "mnc",
       "startup",
-      "factory"
+      "factory",
+      "service",
+      "services"
     ],
     "personal": [
       "reason",
@@ -379,7 +426,14 @@
       "prime",
       "govt",
       "government",
-      "election"
+      "election",
+      "cm",
+      "party",
+      "politics",
+      "bjp",
+      "dmk",
+      "admk",
+      "congress"
     ],
     "add": [
       "album",
@@ -438,7 +492,26 @@
       "teams",
       "ticket",
       "tickets",
-      "vegetables"
+      "vegetables",
+      "tv",
+      "youtube",
+      "yt",
+      "skip",
+      "advertisement",
+      "advt",
+      "advert",
+      "commercial",
+      "brand",
+      "product",
+      "tea",
+      "soap",
+      "shampoo",
+      "reels",
+      "insta",
+      "video",
+      "videos",
+      "ads",
+      "promo"
     ],
     "msg": [
       "announcement",
@@ -633,6 +706,36 @@
       "sell",
       "service",
       "shop"
+    ],
+    "reach": [
+      "likes",
+      "like",
+      "views",
+      "view",
+      "million",
+      "subscribers",
+      "subscriber",
+      "followers",
+      "trending",
+      "lakh",
+      "lakhs",
+      "crore"
+    ],
+    "ex": [
+      "police",
+      "cop",
+      "army",
+      "military",
+      "cm",
+      "mla",
+      "mp",
+      "minister",
+      "captain",
+      "player",
+      "employee",
+      "student",
+      "serviceman",
+      "navy"
     ]
   },
   "self_words": [
@@ -776,7 +879,9 @@
     "pannathinga",
     "venam",
     "venda",
-    "vendam"
+    "vendam",
+    "villai",
+    "vilai"
   ],
   "reported_after": [
     "pannuchu",
@@ -803,7 +908,25 @@
     "kekuraan",
     "kekuranga",
     "koopudranga",
-    "koopudran"
+    "koopudran",
+    "panravangala",
+    "panravanga",
+    "pandravangala",
+    "pandravanga",
+    "panravana",
+    "panravan",
+    "pannuravangala",
+    "pannuravanga",
+    "anuppuravangala",
+    "anupravangala",
+    "panuranga",
+    "panraka",
+    "pandrom",
+    "pannirnga",
+    "pannirukinga",
+    "panninga",
+    "pannom",
+    "pannuvom"
   ],
   "asking_around": {
     "ask": [
@@ -863,7 +986,14 @@
       "for chat",
       "for frndship",
       "for frnd",
-      "for friends"
+      "for friends",
+      "irukkingala",
+      "irukangala",
+      "irrukingala",
+      "irukkeengala",
+      "irukagala",
+      "irukkangala",
+      "irukaangala"
     ]
   }
 }
