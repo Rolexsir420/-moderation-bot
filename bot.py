@@ -702,6 +702,7 @@ async def moderate(client, message: Message, is_edit=False):
     #     new send, so it must not count toward the repeat threshold) ---
     is_duplicate = (not is_edit) and conversation_tracker.check_and_record_duplicate(
         chat_id=message.chat.id, user_id=user_id, text=text,
+        promo_like=conversation_tracker.looks_promo(text, has_dm_word=anchor_present),
     )
     if is_duplicate:
         spam_cmd_text = f".delmute {format_duration(config.SPAM_MUTE_HOURS)}h no spam"
