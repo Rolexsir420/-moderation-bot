@@ -356,7 +356,7 @@ def read_like_human(tokens):
     return out
 
 
-_SPLIT_JOINS = {("tal", "k"): "talk", ("ta", "lk"): "talk", ("de", "em"): "dm",
+_SPLIT_JOINS = {("pannu", "vinga"): "pannuvinga", ("panu", "vinga"): "pannuvinga", ("tal", "k"): "talk", ("ta", "lk"): "talk", ("de", "em"): "dm",
                 ("di", "em"): "dm", ("pe", "em"): "pm"}
 # "DM" said out loud and glued on: "vaaangadddeemmm" -> vanga + dem -> dm
 _SPOKEN_ANCHORS = {"dem": "dm", "diem": "dm", "dyem": "dm"}
@@ -735,6 +735,14 @@ _REFUSE_RAW = {collapse_runs(w) for w in ("mudiyathu", "mudiyadhu", "mudiyaathu"
                                            "mudiyath")}
 
 
+_DESCRIBE_AFTER = {collapse_runs(w) for w in (
+    # NOT "pannuvinga" ("Pm pannuvinga?" = will you pm?) or "panni" ("Wa
+    # msg panni"): those are asks too often
+    "varuthu", "varudhu", "varudu", "varum", "vanthuchu", "vandhuchu", "vanthurukku",
+    "varanga", "varaanga", "varuvanga", "panniruthan", "pannirundhan", "panniruthaan",
+    "pannirukaan", "panra", "pandra", "panrathu", "pandrathu", "panradhu", "pandradhu",
+    "panrathe", "panala", "pannala", "pannale", "panale", "panlai", "list", "pakura", "paakura")}
+
 def _is_past_with_subject(text):
     raw = [collapse_runs(t) for t in tokenize(text)]
     # "Dm me ..." / "msg me" anywhere: an explicit ask, whatever else it says.
@@ -769,6 +777,19 @@ def is_refusal(text):
     """
     if _is_past_with_subject(text):
         return True
+    # Describing what happens, not asking: "Ponnu nu nenachi d(m) varuthu"
+    # (DMs come thinking I'm a girl), "girls ku than msg pannuvinga" (you'd
+    # only message girls), "oru ponu kooda enaku msg panala" (no girl
+    # messaged me). A describing verb right after the DM word, and no
+    # request word anywhere in the message.
+    _rd = [collapse_runs(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
+    _dm_me = any(_anchor_base(t) and _i + 1 < len(_rd) and _rd[_i + 1] in _SELF_WORDS
+                 for _i, t in enumerate(_rd))           # "... dm me" anywhere = an ask
+    if not _dm_me and not any(canonical(t) in _REQUEST_VERBS or tag_of(canonical(t)) == "REQUEST"
+                              for t in _rd):
+        for _i, _t in enumerate(_rd):
+            if _anchor_base(_t) and any(w in _DESCRIBE_AFTER for w in _rd[_i + 1:_i + 3]):
+                return True
     # "personal ah pesa mudiyathu", "dm panna mudiyathu" = can't/won't = no.
     # Checked on the raw words: the spelling list folds "mudiyathu" into
     # "mudiyala" ("couldn't"), which needs the conversation check instead.
@@ -848,6 +869,8 @@ _GIVE_WORDS = {collapse_runs(w) for w in (
 _TALK_WORDS = ("talk", "chat", "pesalam", "pesalama", "pesunga", "pesu", "pesuvom", "pesuvoma")
 
 
+_IF_WANT = ("ned", "need", "interest", "intrest", "want", "wan", "requir", "anyone", "any1", "u ", "ur")
+
 def is_strong_ask(text):
     """
     "dm pannunga", "pm me", "pvt vaa", "inbox wagga", "ib pannunga": a DM
@@ -871,6 +894,15 @@ def is_strong_ask(text):
             joined[-1] += t
         else:
             joined.append(t)
+    # "Text if needed", "dm if interested", "ping me if u want": contact me
+    # if you want it (sellers, ads). Not "if needed I'll text her".
+    for _i, _t in enumerate(tokens[:-1]):
+        if _anchor_base(_t) in ("text", "msg", "dm", "pm", "inbox", "ping") and (
+                tokens[_i + 1] == "if" or (tokens[_i + 1] == "me" and _i + 2 < len(tokens)
+                                           and tokens[_i + 2] == "if")):
+            _rest = tokens[_i + 1:_i + 5]
+            if any(collapse_runs(w).startswith(_IF_WANT) for w in _rest):
+                return True
     if any(_PHONE_RE.fullmatch(t) for t in joined) and any(
             t in _CONTACT_WORDS or collapse_runs(t) in _CONTACT_WORDS or _anchor_base(t) for t in tokens):
         return True
@@ -1086,6 +1118,11 @@ def _has_sense(tokens, sense_words):
     return False
 
 
+_GLUED_ASK_RE = re.compile(r"(msg|mesg|msj|dm|pm|text|txt|inbox|inbx|ping)(me|mi|pls|plz|please)|(dm|pm)(e)(?=pl|$|[^a-z])")
+_GLUED_FILLERS = {"hi", "hii", "helo", "hello", "hey", "bro", "da", "di", "ok", "okay", "pls", "plz",
+                  "just", "sis", "dear", "frnd", "nanba", "anna", "aka", "thambi", "machi", "added",
+                  "aded", "add", "vanakam", "hai", "come", "vaa", "va"}
+
 def split_glued(tokens, flags):
     """
     "addpannunga" -> "add" "pannunga", "dmpannunga" -> "dm" "pannunga",
@@ -1124,6 +1161,24 @@ def split_glued(tokens, flags):
                     out_flags += [fl, False]
                     done = True
                     break
+        if not done and len(tok) >= 6 and tok not in ANCHORS:
+            # whole sentence typed as one word: "addedmsgmeww" = added msg me,
+            # "hiidmmeplz" = hii dm me. Only when the DM word + me/pls is in the
+            # middle of known words, so random long words are left alone.
+            c = collapse_runs(tok)
+            m = _GLUED_ASK_RE.search(c)
+            if m:
+                pre, suf = c[:m.start()], c[m.end():]
+                known = (not pre or len(pre) <= 2 or pre in _GLUED_FILLERS
+                         or canonical(pre) != pre or tag_of(pre))
+                if known and len(suf) <= 3:
+                    a = m.group(1) or m.group(3)
+                    b2 = m.group(2) or "me"
+                    base = a if a in ANCHORS else (ANCHOR_ALIASES.get(a) or _COLLAPSED_ANCHORS.get(a) or a)
+                    words = ([canonical(pre)] if pre else []) + [base, "me" if b2.startswith(("m", "e")) else "pls"]
+                    out += words
+                    out_flags += [False] * (len(words) - 2) + [fl, False]
+                    done = True
         if not done and len(tok) >= 4 and tok not in ANCHORS:
             c = collapse_runs(tok)
             for w in sorted(_REQUEST_WORDS | _REQUEST_VERBS, key=len, reverse=True):
