@@ -48,7 +48,12 @@ CATEGORIES = {
         "bikini", "tits", "video call vanga",
     },
     "relationship_dating": {
-        "hookup", "hookups", "fwb", "wife", "darling",
+        # "wife" is NOT here on its own ("unnga wife thambi" = your wife's
+        # brother, "en wife samayal"): only in swap/share/contact ads, see
+        # is_dating_pair
+        # "darling" is NOT here on its own: "Vijay darling" fan talk is chat.
+        # Pet names warn when said to someone flirting (is_pet_flirt below).
+        "hookup", "hookups", "fwb",
         # "married" only in personals-ad phrases ("married woman", "married
         # guy here"): "Recently married and moved here" is normal chat.
         "married woman", "married women", "married guy", "married man",
@@ -63,7 +68,11 @@ CATEGORIES = {
         # "baby" only in flirting phrases: "baby ku kal vali" is a real baby.
         "hi baby", "hii baby", "hey baby", "baby vc", "baby vaa", "baby va",
         "my baby", "baby dm", "baby pm", "baby msg", "come baby", "sweet baby",
-        "milf", "bhabhi", "housewife", "available", "virgin",
+        # "housewife", "available", "bhabhi", "virgin" are NOT here on their
+        # own: "en amma housewife", "Is he available?", "Doctor available
+        # tomorrow", "virgin mobile" are ordinary chat. They warn only next to
+        # a dating/contact word (is_dating_pair below).
+        "milf",
         "couple exchange", "item irukingla", "personal ah pesalam",
         "real meet me", "secret ah pesalam", "secret chat",
         "outside pesalam",
@@ -81,7 +90,9 @@ CATEGORIES = {
     "gender_orientation": {
         "gayboy", "les", "lesbian", "shemale", "trans",
         # group policy: plain "gay" is also warned (Group Help banned it too)
-        "gay", "gays",
+        # "gays" alone is NOT here: "Hi gays" / "What gays" is a typo for
+        # "guys". It warns only next to an 18+ word (is_context_hit below).
+        "gay",
         # restored: removed by mistake in the 04-Oct update
         "aravaani", "bisexual", "lesbians", "transgender",
     },
@@ -115,9 +126,9 @@ CATEGORIES = {
         "aunty jetty", "un jetty", "unga jetty", "jetty pic", "jetty photo",
         "jetty kaatu", "jetty color", "jetty colour", "jettiya",
     },
-    "service_paid": {
-        "service", "paid",
-    },
+    # "service" / "paid" alone are ordinary ("bike service", "paid review",
+    # "bill paid"); they warn only in a paid-service ad (is_context_hit)
+    "service_paid": set(),
     "scam": set(),
     # group rule 3: never call a member "Fake ID" -> .delmute 3h (bot.py)
     "fake_id_accusation": {
@@ -131,16 +142,187 @@ CATEGORIES = {
         "exchange group", "exchange grp", "exchange groups", "group xchange",
         "grp xchange",
     },
+    # caste words alone are ordinary ("jaathi veri vendam" = no casteism);
+    # they warn only with an insult / low-high word (is_context_hit)
+    "caste_hate": set(),
+}
+
+
+# --- Learned 21-Oct-2026 ---------------------------------------------------
+# English: from two public profanity lists (github.com/dsojevic/profanity-list
+# severity 3-4, github.com/coffee-and-fun/google-profanity-words). Every word
+# was checked against 84k real words (Tamil dataset comments marked "not
+# offensive", this group's history, the Dakshina Tamil word list) through the
+# same matcher check_text uses; words that hit real chat were left out
+# ("damn", "hell", "anal" = அனல், "kum" = -kum ending, "cok" ~ "cook",
+# "paki" ~ "pakki", "semen" ~ "semmeen", "pawn", "jerk", "knob", "xxx" ...).
+# Tamil/Tanglish: words the Tamil offensive dataset (DravidianCodeMix) shows
+# almost only in offensive comments. Mild banter ("loosu", "mokka", "naai",
+# "komali", "potta") is NOT added: in a friend group that is chat.
+_LEARNED = {
+    "sexual": {
+        "1 man 1 jar", "1m1j", "1man1jar", "2 girls 1 cup", "2g1c", "2girls1cup", "4r5e",
+        "acrotomophile", "acrotomophilia", "alabama hot pocket", "alabama tuna melt",
+        "alaskan pipeline", "algophile", "algophilia", "anilingus", "anus", "apotemnophile",
+        "apotemnophilia", "arrse", "auto erotic", "autoerotic", "b00bs", "babeland", "baby batter",
+        "baby gravy", "baby juice", "ball batter", "ball gag", "ball gravy", "ball kicking",
+        "ball licking", "ball sack", "ball sucking", "ballbag", "ballcuzi", "ballgag", "ballsack",
+        "bang bros", "bang bus", "bangbros", "bangbus", "bareback", "barely legal", "barenaked",
+        "bastinado", "bbw", "beastial", "beastiality", "beastility", "beaver cleaver",
+        "beaver lips", "beestiality", "bellesa", "bestial", "bestiality", "big breasts",
+        "big knockers", "bimbos", "birdlock", "blonde action", "blonde on blonde action",
+        "blow job", "blow your load", "blowjobs", "blue waffle", "bluewaffle", "blumpkin",
+        "bondage", "boner", "boob", "boobie", "booobs", "boooobs", "booooobs", "booooooobs",
+        "booty call", "breasts", "brown shower", "brown showers", "brunette action", "buceta",
+        "bukkake", "bullet vibe", "bullet vibrator", "bung hole", "bunghole", "busty",
+        "buttcheeks", "butthole", "buttmunch", "buttplug", "camel toe", "camgirl", "camslut",
+        "camwhore", "canadian porch swing", "choad", "chocolate rosebud", "chocolate rosebuds",
+        "chode", "cholerophile", "cholerophilia", "cialis", "circle jerk", "circlejerk", "cl1t",
+        "claustrophile", "claustrophilia", "cleveland accordion", "cleveland hot waffle",
+        "cleveland steamer", "clit", "clitface", "clitoris", "clits", "coimetrophile",
+        "coimetrophilia", "cokmuncher", "coksucka", "collared", "collaring", "coochie", "coochy",
+        "cooter", "coprolagnia", "coprophile", "coprophilia", "cornhole", "creampie", "cum",
+        "cum shot", "cum shots", "cumbubble", "cumdumpster", "cumguzzler", "cumjockey", "cummer",
+        "cumming", "cums", "cumshot", "cumshots", "cumslut", "cumtart", "cunilingus",
+        "cunillingus", "cunnie", "cunnilingus", "cyalis", "cyberfuc", "daterape", "ddlg",
+        "deep throat", "deepthroat", "dendrophile", "dendrophilia", "dildos", "dinks", "dipsea",
+        "dirsa", "dirty pillows", "dirty sanchez", "dishabiliophile", "dishabiliophilia",
+        "dog style", "doggie style", "doggiestyle", "dogging", "doggy style", "doggystyle",
+        "dolcett", "domination", "dominatrix", "domme", "dommes", "donkey punch", "donkeyribber",
+        "doochbag", "double dong", "double penetration", "dp action", "dry hump", "dutch rudder",
+        "dystychiphile", "dystychiphilia", "ecchi", "edgeplay", "ejaculate", "ejaculated",
+        "ejaculates", "ejaculating", "ejaculatings", "ejaculation", "ejakulate", "electroplay",
+        "emetophile", "emetophilia", "erotic", "erotism", "escort", "eskimo trebuchet", "felatio",
+        "felch", "felching", "fellate", "fellating", "fellatio", "feltch", "female squirting",
+        "femdom", "figging", "finger bang", "fingerbang", "fingerbanging", "fingered", "fisted",
+        "fisting", "foot fetish", "foot job", "footjob", "french rudder", "frolicme", "frottage",
+        "frotting", "futanari", "g spot", "gangbanged", "gangbangs", "gaybob", "gaydo", "gaysex",
+        "gaywad", "genitals", "genitorture", "gerontophile", "gerontophilia", "girl on top",
+        "goatcx", "goatse", "gokkun", "golden shower", "golden showers", "gooch", "goregasm",
+        "grope", "hand job", "handjob", "hardcoresex", "hentai", "heshe", "hippophile",
+        "hippophilia", "hoare", "hoer", "homoerotic", "hooker", "hore", "horniest", "horny",
+        "hotsex", "humping", "intercourse", "jack off", "jackoff", "jailbait", "jerk mate",
+        "jerk off", "jerkmate", "jism", "jiz", "jizm", "jizz", "juggs", "kennebunkport surprise",
+        "kentucky klondike", "kentucky tractor puller", "kinbaku", "kinkster", "kinky", "kiunt",
+        "knobbing", "knobed", "knobjocky", "knobjokey", "kondums", "kooch", "kumer", "kummer",
+        "kumming", "kums", "kunilingus", "kynophile", "kynophilia", "labia",
+        "leather straight jacket", "lemon party", "lemonparty", "leningrad steamer", "literotica",
+        "lovemaking", "lusting", "m45terbate", "ma5terb8", "ma5terbate", "male squirting",
+        "master bate", "masterb8", "masterbat3", "masterbate", "masterbation", "masterbations",
+        "masturbate", "meat spin", "meatspin", "menage a trois", "menages a trois", "menophile",
+        "menophilia", "mexican pancake", "milwaukee blizzard", "minge", "missionary position",
+        "mississippi birdbath", "mound of venus", "mr hands", "mrhands", "muff", "muff diver",
+        "muff diving", "muffdiver", "muffdiving", "mvtube", "n1gga", "n1gger", "nambla", "nawashi",
+        "necrophile", "necrophilia", "nimpho", "nimphomania", "nimphomaniac", "nipple",
+        "nipple clamp", "nipple clamps", "nipples", "nob jokey", "nobjocky", "nobjokey",
+        "nsfw images", "nudity", "nutsack", "nutten", "nympho", "nymphomania", "nymphomaniac",
+        "octopussy", "omorashi", "one cup two girls", "one guy one jar", "one jar one man",
+        "one man one jar", "only fans", "onlyfans", "orgasim", "orgasims", "orgasmic", "orgasms",
+        "orgy", "p0rn", "paedo bear", "paedobear", "paedophile", "paedophilia", "pain slut",
+        "painslut", "panamanian petting zoo", "panooch", "panties", "parthenophile",
+        "parthenophilia", "peckerhead", "pedo bear", "pedobear", "pedophile", "pedophilia",
+        "pegging", "phagophile", "phagophilia", "phonesex", "pimpis", "poinephile", "poinephilia",
+        "pole smoker", "polesmoker", "ponyboy", "ponygirl", "ponyplay", "poof", "poon", "poonani",
+        "poonany", "poontang", "poop chute", "poopchute", "pornhub", "porno", "pornos",
+        "prince albert piercing", "proctophile", "proctophilia", "pron", "pthc", "pube", "pubes",
+        "punanny", "punany", "pusies", "pusse", "pussi", "pussies", "pussylicking", "pussys",
+        "pusy", "queaf", "queef", "quim", "raging boner", "ramen yarmulke", "renob",
+        "reverse cowgirl", "rhabdophile", "rhabdophilia", "rhypophile", "rhypophilia", "rimjaw",
+        "rimjob", "rimming", "rusty trombone", "santorum", "scatophile", "scatophilia", "schlong",
+        "scissoring", "seplophile", "seplophilia", "sexo", "shag", "shagger", "shaggin",
+        "shagging", "shaved beaver", "shibari", "shlong", "shota", "shrimping", "skank", "skeet",
+        "skittle harvest", "skittles harvest", "slut", "slutbag", "sluts", "smut", "snowballing",
+        "sodomise", "sodomist", "sodomize", "sodomy", "splooge", "splooge moose", "spooge",
+        "spread legs", "spunk", "strap on", "strapon", "strappado", "suicide girls",
+        "sultry women", "t1tt1e5", "t1tties", "taphephile", "taphephilia", "teets", "thanatophile",
+        "thanatophilia", "throating", "throbbing boner", "thumbzilla", "tit", "titt", "tittie5",
+        "titties", "titty", "topless", "traumatophile", "traumatophilia", "tribadism", "tribbing",
+        "tub girl", "tubgirl", "twink", "two girls one cup", "upskirt", "urethra play", "urophile",
+        "urophilia", "v14gra", "v1gra", "va j j", "vagina", "venus mound", "viagra", "vibrator",
+        "vjayjay", "vorarephile", "vorarephilia", "voyeur", "voyeurweb", "vulva", "wet dream",
+        "wiitwd", "wolfbagging", "worldsex", "wrapping men", "wrinkled starfish", "xhamster",
+        "xnxx", "xrated", "xtube", "xvideos", "xyrophile", "xyrophilia", "yaoi", "yellow shower",
+        "yellow showers", "yiffy", "zippo cat", "zippocat", "zoophile", "zoophilia",
+    },
+    "tamil_abusive": {
+        "5h1t", "5hit", "a55", "apeshit", "ar5e", "arse", "arsehole", "assbag", "assbandit",
+        "assbanger", "assbite", "assclown", "asscock", "asscracker", "asses", "assface",
+        "assfucker", "assfukka", "assgoblin", "asshat", "asshead", "asshole", "assholes",
+        "asshopper", "assjacker", "asslick", "asslicker", "assmonkey", "assmunch", "assmuncher",
+        "asspirate", "assshole", "asssucker", "asswad", "asswhole", "asswipe", "b17ch", "b1tch",
+        "bampot", "bastardo", "bellend", "biatch", "big cock", "bitch", "bitcher", "bitchers",
+        "bitches", "bitchin", "bitching", "black cock", "bollock", "bollocks", "bollok", "bollox",
+        "bugger", "bullshit", "c0ck", "c0cksucker", "cawk", "clusterfuck", "cnut", "cock sucker",
+        "cockbite", "cockburger", "cockface", "cockhead", "cockjockey", "cockknoker", "cockmaster",
+        "cockmongler", "cockmongruel", "cockmonkey", "cockmunch", "cockmuncher", "cocknose",
+        "cocknugget", "cocks", "cockshit", "cocksmith", "cocksmoker", "cocksuck", "cocksucked",
+        "cocksucker", "cocksucking", "cocksucks", "cocksuka", "cocksukka", "cunt", "cuntface",
+        "cunthole", "cuntlick", "cuntlicker", "cuntlicking", "cuntrag", "cunts", "cyberfuck",
+        "cyberfucked", "cyberfucker", "cyberfuckers", "cyberfucking", "d1ck", "dickbag",
+        "dickbeater", "dickface", "dickhead", "dickhole", "dickjuice", "dickmilk", "dickmonger",
+        "dickslap", "dicksucker", "dickwad", "dickweasel", "dickweed", "dickwod", "dipshit",
+        "dlck", "doosh", "douche", "douchebag", "duche", "dumbshit", "dumshit", "fannyfucker",
+        "fatass", "fcuk", "fcuker", "fcuking", "fingerfuck", "fingerfucked", "fingerfucker",
+        "fingerfuckers", "fingerfucking", "fingerfucks", "fistfuck", "fistfucked", "fistfucker",
+        "fistfuckers", "fistfucking", "fistfuckings", "fistfucks", "fooker", "fucka", "fuckers",
+        "fuckhead", "fuckheads", "fuckin", "fuckings", "fuckingshitmotherfucker", "fuckme",
+        "fucks", "fucktard", "fucktards", "fuckwad", "fuckwads", "fuckwhit", "fuckwit", "fuckwits",
+        "fuk", "fuker", "fukker", "fukkin", "fuks", "fukwhit", "fukwit", "fux", "fux0r", "gayass",
+        "giant cock", "huge cock", "jackass", "kawk", "knobead", "knobend", "knobhead", "kock",
+        "kunt", "kunts", "l3itch", "m0f0", "m0fo", "massive cock", "mo fo", "mof0", "mofo",
+        "mothafuck", "mothafucka", "mothafuckas", "mothafuckaz", "mothafucked", "mothafucker",
+        "mothafuckers", "mothafuckin", "mothafucking", "mothafuckings", "mothafucks", "motherfuck",
+        "motherfucked", "motherfuckers", "motherfuckin", "motherfucking", "motherfuckings",
+        "motherfuckka", "motherfucks", "muthafuckker", "mutherfucker", "nobhead", "numbnuts",
+        "penisfucker", "phuck", "phuk", "phuked", "phuking", "phukked", "phukking", "phuks",
+        "phuq", "piece of shit", "pigfucker", "pises", "pising", "pisof", "piss", "piss pig",
+        "pissed", "pisser", "pissers", "pisses", "pissflap", "pissflaps", "pissin", "pissing",
+        "pissoff", "pisspig", "scroat", "scrote", "sh1t", "shit bag", "shit bagger", "shit brain",
+        "shit breath", "shit cunt", "shit eating", "shit face", "shit faced", "shit fit",
+        "shit head", "shit heel", "shit hole", "shit house", "shit load", "shit pot",
+        "shit spitter", "shit stain", "shitass", "shitbag", "shitbagger", "shitblimp", "shitbrain",
+        "shitbreath", "shitcunt", "shitdick", "shite", "shiteating", "shitey", "shitface",
+        "shitfaced", "shitfit", "shitfuck", "shitfull", "shithead", "shitheel", "shithole",
+        "shithouse", "shitings", "shitload", "shitpot", "shits", "shitspitter", "shitstain",
+        "shitted", "shitter", "shitters", "shittiest", "shitting", "shittings", "shity", "shiz",
+        "shiznit", "smeg", "smegma", "son of a bitch", "throbbing cock", "thundercunt", "titfuck",
+        "tittiefucker", "tittyfuck", "tittywank", "titwank", "tosser", "tw4t", "twat", "twathead",
+        "twatlips", "twatty", "twunt", "twunter", "w00se", "wank", "wanker", "wanky", "whoar",
+        # Tamil / Tanglish
+        # "kai adi..." = masturbate (slang, every hit in the dataset was this)
+        "kai adi", "kai adich", "kai adika", "kai adikk", "kaiadi", "கை அடிச்ச", "கை அடிக்க",
+        "fap", "faps", "fapping", "fapped", "fapper",
+        "otha", "oththa", "gotha", "badu", "devidiya", "dhevidiya",
+        "தேவிடியா", "தேவுடியா", "கூதி", "வேசி", "மயிரு",
+    },
     "caste_hate": {
-        "keel", "jaathi",
+        "beaner", "beaners", "boiolas", "buddha head", "buddhahead", "bulldyke", "butt pirate",
+        "camel jockey", "camel jockies", "cameljockey", "cameljockies", "carpet muncher",
+        "carpetmuncher", "chinc", "chink", "chinks", "chinky", "coons", "curry muncher",
+        "currymuncher", "darkey", "darkie", "darkies", "darky", "doon coon", "dooncoon",
+        "dune coon", "fag", "fagbag", "fagg", "fagging", "faggit", "faggitt", "faggot", "faggs",
+        "fagot", "fagots", "fags", "fagtard", "fudge packer", "fudgepacker", "gaylord", "gaytard",
+        "gook", "gook eye", "gookie", "gooks", "gooky", "heeb", "jigaboo", "jiggaboo", "jiggerboo",
+        "kike", "kyke", "lesbo", "lezzie", "negro", "neonazi", "nig nog", "nigerian hurricane",
+        "nigg3r", "nigg4h", "nigga", "niggah", "niggas", "niggaz", "nigger", "niggers", "niglet",
+        "nignog", "petrol sniffer", "petrolsniffer", "pikey", "pikeys", "pnigerophile",
+        "pnigerophilia", "pnigophile", "pnigophilia", "queerbait", "queerhole", "rag head",
+        "rag heads", "raghead", "ragheads", "retard", "slant eye", "slanteye", "spearchucker",
+        "spic", "spick", "spicks", "spics", "swamp guinea", "towel head", "towelhead", "tranny",
+        "wet back", "wetback", "white power", "whitepower", "zipper head", "zipperhead",
     },
 }
+for _cat, _words in _LEARNED.items():
+    CATEGORIES[_cat] |= _words
 
 # Tamil slang roots with many suffix variants (sunniya, punduka, koothiya,
 # etc.) — matched as a prefix rather than requiring an exact-word hit.
 # Deliberately NOT used for ambiguous English roots or words with other
 # legitimate meanings.
 PREFIX_ROOTS = {
+    # every ending of masturbate (+ common misspellings): masturbating,
+    # mastrubation, masterbate, masturbation...
+    "sexual": {"masturb", "mastrub", "masterba", "mastarba", "masturp", "mastub"},
     "tamil_abusive": {
         "punda", "pundai", "koothi", "koodhi", "oombu", "oombi", "mayiru",
         "thevidiya", "thevudiya", "tevadiya", "vibachari",
@@ -213,7 +395,14 @@ def _collapse_runs(tok):
     return re.sub(r"(.)\1+", r"\1", tok)
 
 
+# real words whose stretched-letter fold lands on a blocklist word:
+# "less" -> "les" ("chance less" is not a slur)
+_REAL_WORDS = {"less", "oothaa", "ootha", "oodha"}   # ஊதா (purple) is not "otha"
+
+
 def _token_variants(tok):
+    if tok in _REAL_WORDS:
+        return {tok}
     variants = {tok}
     variants.add(_strip_digits(tok))
     variants.add(_collapse_runs(tok))
@@ -231,6 +420,9 @@ def _merge_split_words(tokens, words):
     Returns the set of words found this way.
     """
     found = set()
+    # nothing to join unless 3+ one-letter pieces sit in a row
+    if not re.search(r"(?:^|,)(?:[^,],){2}[^,](?:,|$)", ",".join(tokens)):
+        return found
     i, n = 0, len(tokens)
     while i < n:
         matched = False
@@ -272,7 +464,13 @@ def _phrase_hit(term, lowered):
 
 # Innocent phrases removed before matching, so a blocklisted word inside
 # them doesn't hit: "oru cpl of days" = "a couple of days".
-_SAFE_PHRASES_RE = re.compile(r"(?<![a-z0-9])cpl\s+of(?![a-z0-9])")
+_SAFE_PHRASES_RE = re.compile(
+    r"(?<![a-z0-9])cpl\s+of(?![a-z0-9])"
+    # ஒத்த = "one / single": "nee oththa sollu sollu", "otha roova", "otha
+    # paarvai". The swear "Otha mass da" has no counting word after it.
+    r"|(?<![a-z0-9])o+t+h*t*h*a+\s+(?:sol+u\w*|va+rth\w*|pa+rv\w*|ro+[ov]a\w*|ru+pa\w*|ru+bai\w*|"
+    r"a+l|na+l|kan+u|paiyan|ponn?u|pul+a|nimis\w*|thadav\w*|va+t+i|kai|kaal|ve+du|mara+m|"
+    r"vartha\w*|var+u\w*|rasa|raja)(?![a-z0-9])")
 
 
 # Disguised CSAM spam: "𝐃*𝐌 𝐅𝐎𝐑 𝐂𝐇!!𝐃 𝐏𝐑𝐎*𝐍", "ch1ld pr0n", "kids nudes".
@@ -320,6 +518,180 @@ def is_csam_spam(text):
     return False
 
 
+# Words that are dating/18+ only in an ad shape: a WHO word (housewife,
+# aunty, girls, bhabhi...) together with an OFFER/CONTACT word (available,
+# ping, dm, chat, irukingla...). "Doctor from chennai Housewives ping me",
+# "Housewife irukingla", "girls available dm" -> warn; "en amma housewife",
+# "Is he available?" -> nothing.
+_DATING_WHO = {"housewife", "housewifes", "housewives", "housewive", "bhabhi", "bhabi", "aunty",
+               "aunties", "auntys", "girls", "girl", "ladies", "lady", "female", "females",
+               "women", "womens", "virgin", "virgins", "ponnu", "ponnunga", "ponuga", "ponnuga",
+               "boys", "male", "males", "gents"}
+_DATING_ONLY_WHO = {"housewife", "housewifes", "housewives", "housewive", "bhabhi", "bhabi",
+                    "virgin", "virgins"}
+_DATING_OFFER = {"available", "availabe", "avaliable", "avl", "ping", "dm", "pm", "msg", "inbox", "ib",
+                 "chat", "call", "vc", "contact", "number", "meet", "service", "paid", "needed",
+                 "wanted", "venum", "need", "want", "looking", "friendship", "frndship", "relationship",
+                 "here", "irukingla", "irukinga", "irukeengala", "irukaanga", "iruka", "irukanga",
+                 "iruke", "irukehalq", "irukeengala", "irukingala", "any", "anyone", "night", "real"}
+
+_AVAILABLE_SERVICE = {"realmeet", "meet", "meetup", "vc", "videocall", "massage", "service", "services",
+                      "paid", "price", "genuine", "night", "nightchat", "fullbody", "escort"}
+
+_WIFE_AD = {"swap", "swapping", "swaping", "share", "sharing", "exchange", "available", "avl",
+            "dm", "pm", "inbox", "ib", "ping", "meet", "realmeet", "cuckold", "cuck", "service",
+            "bull", "hotwife"}
+
+
+# Pet names (darling, chellam, chlm, papa, babe...) are casual: "Hy
+# chellam", "Hi darling", "love u chlm", "Okayy papa" -> chat, never warned.
+# They warn only next to something sexual or a private invite: "Thaniya vaaa
+# papa", "darling send pic", "hot chellam", "kiss me babe". "lonely" is
+# never warned: "Pesalaama ngaa feeling lonely" can be an honest wish to talk.
+_PET_WORDS = {"darling", "darlin", "darlng", "darlinggg", "chelam", "chellam", "chelame", "chellame",
+              "chelamae", "chellamae", "chelama", "chlm", "chlmm", "papa", "paapa", "pappa", "babe",
+              "babes", "honey", "sweetheart", "sweety", "sweetie", "செல்லம்",
+              "செல்லமே", "பாப்பா", "டார்லிங்"}
+# sexual words or a private invite only (no greetings, love, miss, cute, umma)
+_PET_FLIRT = {"kiss", "kis", "sexy", "hot", "bed", "naked", "nude", "nudes", "thaniya", "thaniyaa",
+              "tania", "thanimai", "alone", "pvt", "private", "personal", "photo", "pic", "pics",
+              "selfie", "vc", "videocall", "romance", "romantic", "date", "hug", "touch",
+              "body", "inbox", "dm", "pm"}
+
+
+def _fold(w):
+    return re.sub(r"(.)\1+", r"\1", w)
+
+
+def is_pet_flirt(text):
+    if not text:
+        return False
+    raw = _normalize_unicode(text).lower().split()
+    words = [re.sub(r"[^a-z\u0b80-\u0bff]", "", w) for w in raw]
+    words = [w for w in words if w]
+    folded = [_fold(w) for w in words]
+    pet = {_fold(p) for p in _PET_WORDS}
+    pets = [i for i, w in enumerate(folded) if w in pet or words[i] in _PET_WORDS]
+    if pets:
+        others = [w for i, w in enumerate(folded) if i not in pets]
+        if any(w in {_fold(f) for f in _PET_FLIRT} for w in others):
+            return True
+    return False
+
+
+def is_dating_pair(text):
+    if not text:
+        return False
+    words = [re.sub(r"[^a-z]", "", w) for w in _normalize_unicode(text).lower().split()]
+    words = [w for w in words if w]
+    # "wife swap", "wife sharing", "my wife available dm": a much narrower
+    # list than for housewife, since "en wife ku call pannanum" is ordinary
+    if any(w in ("wife", "wifes", "wives", "wifey") for w in words) and any(
+            w in _WIFE_AD for w in words):
+        return True
+    who = [i for i, w in enumerate(words) if w in _DATING_ONLY_WHO or w.startswith("housewi")]
+    if who:
+        return any(w in _DATING_OFFER or w.startswith(("irukk", "iruk")) for w in words)
+    # "available" with a who-word: "girls available", "aunty available"
+    if any(w in ("available", "availabe", "avaliable", "avl") for w in words):
+        # "girls available", "realmeet available", "video call available",
+        # "Dm me I am available" -> ad; "Is he available?" -> chat
+        joined = " ".join(words)
+        return (any(w in _DATING_WHO or w in _AVAILABLE_SERVICE for w in words)
+                or (re.search(r"(?<![a-z])(i am|iam|im|i m|me) (available|avl)", joined) is not None
+                    and any(w in ("dm", "pm", "msg", "inbox", "ib", "ping", "text") for w in words))
+                or "video call" in joined)
+    return False
+
+
+# 18+ group ads: "Ex grrrpp", "s3x grp", "s*x group link", "sex gc join".
+# "sex"-like words + a group word always warn. Plain "ex" (also = my ex /
+# old) only when a group word comes RIGHT after it and the message is short
+# or has an ad word: "en ex grp la iruntha" (my old group) stays clean.
+_SEXLIKE = {"sex", "sx", "sexx", "secs", "seggs", "sexy"}
+_GROUP_WORDS = {"grp", "gp", "group", "groups", "gc", "channel", "chanel", "link", "links", "vc",
+                "vids", "video", "videos", "chat"}
+_AD_WORDS = {"join", "link", "links", "dm", "pm", "msg", "inbox", "free", "paid", "vaanga", "vanga",
+             "come", "add", "telegram"}
+
+
+def is_sex_group(text):
+    if not text:
+        return False
+    low = _normalize_unicode(text).lower()
+    words = []
+    for w in low.split():
+        w = w.replace("3", "e").replace("*", "e").replace("€", "e")
+        w = re.sub(r"[^a-z]", "", w)
+        w = re.sub(r"(.)\1+", r"\1", w)
+        if w:
+            words.append(w)
+    gw = {re.sub(r"(.)\1+", r"\1", g) for g in _GROUP_WORDS}
+    for i, w in enumerate(words):
+        nxt = words[i + 1:i + 3]
+        if w in {re.sub(r"(.)\1+", r"\1", x) for x in _SEXLIKE} and any(n in gw for n in nxt):
+            return True
+        if w == "ex" and i + 1 < len(words) and words[i + 1] in gw - {"chat", "vc", "video", "videos", "vids"}:
+            if len(words) <= 3 or any(x in _AD_WORDS for x in words):
+                return True
+    return False
+
+
+# Words that are fine alone and only hit in a context (same idea as
+# is_dating_pair). Returns a set of categories.
+_CASTE_WORDS = {"jaathi", "jathi", "jaadhi", "jadhi", "jati", "jaati", "saathi", "sathi", "caste"}
+_CASTE_INSULT = {"keel", "kezh", "kizh", "kilh", "kezhu", "low", "lower", "lowest", "thaazhntha",
+                 "thazhntha", "thaalntha", "thalntha", "naaye", "naye", "nai", "naai", "kevalam",
+                 "pariah", "inferior", "dog", "dogs", "scum", "kudi", "kedu", "payale", "payalae",
+                 "pasanga", "kootam", "koottam"}
+_CASTE_AGAINST = {"vendam", "venam", "ethuku", "edhuku", "yethuku", "illa", "ila", "no", "stop",
+                  "ozhiga", "ozhika", "ozhiyanum", "kidaiyathu", "kidayathu", "against", "vida",
+                  "vidunga", "paakatheenga", "pakatheenga", "paakathinga"}
+_GAYS_18 = {"sex", "sexy", "chat", "dm", "pm", "inbox", "meet", "dating", "date", "nude", "nudes",
+            "only", "boys", "men", "vc", "call", "hookup", "top", "bottom", "tg", "telegram",
+            "group", "grp", "link"}
+_PAID_AD = {"girls", "girl", "aunty", "aunties", "ladies", "call", "vc", "video", "massage", "body",
+            "available", "avl", "meet", "realmeet", "night", "dm", "pm", "msg", "inbox", "ib",
+            "genuine", "escort", "spa", "nude", "nudes", "sex", "service", "paid", "price",
+            "rate", "venumo", "venuma", "housewife", "housewives", "real", "verified", "demo"}
+
+
+def is_context_hit(text):
+    if not text:
+        return set()
+    words = [re.sub(r"[^a-z]", "", w) for w in _normalize_unicode(text).lower().split()]
+    words = [w for w in words if w]
+    ws = set(words)
+    out = set()
+    # caste: "keel jaathi naaye" -> hate; "jaathi veri vendam" -> fine
+    if ws & _CASTE_WORDS or "keel" in ws:
+        insult = ws & _CASTE_INSULT or any(w.startswith(("naai", "naay", "naaig", "nayg", "thalthap",
+                                                          "thazhthap", "thaazhthap")) for w in ws)
+        if insult and not ws & _CASTE_AGAINST:
+            out.add("caste_hate")
+    # "gays" next to an 18+ word: "gays only chat", "gays dm"
+    if ("gays" in ws or "gayz" in ws) and ws & _GAYS_18:
+        out.add("gender_orientation")
+    # paid/service ad: "paid service available", "service venumo dm"
+    if ws & {"paid", "service", "services"}:
+        if len(ws & _PAID_AD - {"paid", "service"}) >= 1 and (
+                "paid" in ws and "service" in ws or ws & (_PAID_AD - {"paid", "service", "price", "rate", "real"})):
+            out.add("service_paid")
+    return out
+
+
+_TERM_CACHE = {}
+
+
+def _split_terms(category, terms):
+    key = (category, len(terms))
+    if key not in _TERM_CACHE:
+        script = {t for t in terms if any(ord(c) > 0x2000 for c in t)}
+        phrase = {t for t in terms - script if " " in t}
+        _TERM_CACHE[key] = (script, phrase, terms - script - phrase)
+    return _TERM_CACHE[key]
+
+
 def check_text(text):
     """
     Returns (is_hit, categories) where categories is a set of category
@@ -330,33 +702,39 @@ def check_text(text):
 
     if is_csam_spam(text):
         return True, {"severe_exploitation"}
+    _dating = is_dating_pair(text) or is_pet_flirt(text)
+    _sexgroup = is_sex_group(text)
+    _context = is_context_hit(text)
 
     text = _normalize_unicode(text)
+    # "@" inside a word is an "a": "m@sturbate", "s@xy" (as "Vij@y" = Vijay)
+    text = re.sub(r"(?<=[A-Za-z])@(?=[A-Za-z])", "a", text)
     lowered = _SAFE_PHRASES_RE.sub(" ", text.lower())
     tokens = _WORD_RE.findall(lowered)
     hit_categories = set()
 
     # 1) phrase / substring matching (multi-word terms, non-Latin script,
     #    or single words where substring containment is intentional)
+    # every spelling variant of every word in the message, computed once
+    tok_vars = set()
+    for tok in tokens:
+        tok_vars |= _token_variants(tok)
     for category, terms in CATEGORIES.items():
-        single_word_terms = set()
-        for term in terms:
-            if any(ord(c) > 0x2000 for c in term):
-                # non-Latin script (Tamil): plain substring, unchanged
-                if term in lowered:
-                    hit_categories.add(category)
-            elif " " in term:
+        script_terms, phrase_terms, single_word_terms = _split_terms(category, terms)
+        for term in script_terms:
+            # non-Latin script (Tamil): plain substring, unchanged
+            if term in lowered:
+                hit_categories.add(category)
+                break
+        if category not in hit_categories:
+            for term in phrase_terms:
                 if _phrase_hit(term, lowered):
                     hit_categories.add(category)
-            else:
-                single_word_terms.add(term)
-                # single-word term: check exact token + common evasion
-                # variants rather than raw substring (avoids matching
-                # "ass" inside "class", "glass", etc.)
-                for tok in tokens:
-                    if term in _token_variants(tok):
-                        hit_categories.add(category)
-                        break
+                    break
+        # single-word term: exact token + common evasion variants rather
+        # than raw substring (avoids matching "ass" inside "class")
+        if category not in hit_categories and tok_vars & single_word_terms:
+            hit_categories.add(category)
 
         # 1b) letter-by-letter obfuscation of a single-word term
         # ("r.a.p.e", "r a p e") — only meaningful for 3+ letter words.
@@ -372,4 +750,9 @@ def check_text(text):
                     hit_categories.add(category)
                     break
 
+    if _dating:
+        hit_categories.add("relationship_dating")
+    if _sexgroup:
+        hit_categories.add("sexual")
+    hit_categories |= _context
     return (len(hit_categories) > 0), hit_categories
