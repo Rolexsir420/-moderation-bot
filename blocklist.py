@@ -328,6 +328,9 @@ PREFIX_ROOTS = {
         "thevidiya", "thevudiya", "tevadiya", "vibachari",
         "thevadiya", "thevdiya", "thevudya", "thevidya", "tevdiya", "dhevidiya",
         "dhevadiya", "fundai",
+        # every spelling of thayoli seen in real data: thaiyoli, thaioli,
+        # thaayoli, thayolli, thayolinga, thaaiyoligala...
+        "thayol", "thaayol", "thaiyol", "thaaiyol", "thaiol", "thayool", "thaiyool",
         # "munda" is NOT a prefix root: it prefixes "mundanaal" (day
         # before yesterday). The exact word "munda" is still caught via
         # CATEGORIES above.
@@ -439,6 +442,25 @@ def _merge_split_words(tokens, words):
         if not matched:
             i += 1
     return found
+
+
+def _short_piece_hit(tokens, words, roots=()):
+    """"th e vu di ya" / "pu nd a": 2+ pieces of 1-2 letters in a row that
+    join into a blocklist word (or start with a slang root)."""
+    n = len(tokens)
+    short = lambda t: len(t) <= 2 and t.isalpha()      # "s1" is a name/number, not a piece
+    for i in range(n):
+        if not short(tokens[i]):
+            continue
+        joined = tokens[i]
+        for j in range(i + 1, min(n, i + 10)):
+            if not short(tokens[j]):
+                break
+            joined += tokens[j]
+            if len(joined) >= 5 and (_token_variants(joined) & words
+                                     or any(joined.startswith(r) for r in roots)):
+                return True
+    return False
 
 
 def _phrase_hit(term, lowered):
@@ -579,11 +601,22 @@ def is_pet_flirt(text):
     return False
 
 
+_DATING_INVITE = {"polam", "pogalam", "polama", "pogalama", "poalam", "vaanga", "vanga", "va", "vaa",
+                  "ready", "interested", "intrested", "up", "partner", "venum", "venuma", "need",
+                  "needed", "want", "wanted", "looking", "any", "anyone", "any1", "girls", "girl",
+                  "boys", "aunty", "single", "irukingala", "irukkingala", "irukeengala", "pannalam",
+                  "panalam", "pannalama", "dm", "pm", "msg", "inbox", "ping"}
+
+
 def is_dating_pair(text):
     if not text:
         return False
     words = [re.sub(r"[^a-z]", "", w) for w in _normalize_unicode(text).lower().split()]
     words = [w for w in words if w]
+    # "anyone up for dating?", "dating polam", "any for dating"
+    if any(w in ("dating", "datng", "datting", "dateing") for w in words) and any(
+            w in _DATING_INVITE for w in words):
+        return True
     # "wife swap", "wife sharing", "my wife available dm": a much narrower
     # list than for housewife, since "en wife ku call pannanum" is ordinary
     if any(w in ("wife", "wifes", "wives", "wifey") for w in words) and any(
@@ -655,6 +688,17 @@ _PAID_AD = {"girls", "girl", "aunty", "aunties", "ladies", "call", "vc", "video"
             "genuine", "escort", "spa", "nude", "nudes", "sex", "service", "paid", "price",
             "rate", "venumo", "venuma", "housewife", "housewives", "real", "verified", "demo"}
 
+_BULL_CONTEXT = {"here", "any", "anyone", "boy", "boys", "wife", "cpl", "cpls", "couple", "couples", "hotwife",
+                 "sisy", "master", "slave", "top", "btm", "bottom", "loking", "looking", "dm", "pm", "inbox",
+                 "real", "meet", "realmeet", "size", "genuine", "ned", "neded", "need", "wanted", "want",
+                 "available", "avl", "vanga", "vaanga", "interest", "interested", "role", "roleplay", "task",
+                 "vc", "service", "aunty", "aunties", "single", "male", "m"}
+_GIF_TRADE = {"chat", "chating", "chatting", "play", "exchange", "exchang", "xchange", "venuma", "venum",
+              "need", "want", "have", "roleplay", "vc", "interested", "intrested", "girls", "girl",
+              "aunty", "aunties", "anuty", "anutys", "trade", "share", "sharing", "swap", "dm",
+              "pm", "inbox", "panalama", "pannalama", "panalam", "pannalam", "vaanga", "vanga",
+              "sex", "hot", "nude", "boy", "boys"}
+
 
 def is_context_hit(text):
     if not text:
@@ -669,6 +713,25 @@ def is_context_hit(text):
                                                           "thazhthap", "thaazhthap")) for w in ws)
         if insult and not ws & _CASTE_AGAINST:
             out.add("caste_hate")
+    # cuckold slang: "Any bull here", "I am bull boy experienced", "cuckold
+    # here, dm me bull". Not "Red Bull", "bull shit", "bulls eye", jallikattu.
+    if any(_fold(w) in ("bul", "buls") for w in words):
+        low = " ".join(words)
+        if not re.search(r"\bred bul|\bbul+s? ?(shit|sit|eye|fight|market|run|riding|ride|dog|terrier|frog|shark|dozer)"
+                         r"|jalikat|jallikat|manjuvirat|kaalai|kalai", low) and any(
+                _fold(w) in _BULL_CONTEXT or _fold(w).startswith(("cuck", "cuko", "cokold", "cockold", "expe"))
+                for w in words):
+            out.add("sexual")
+    # "sissy" (siisy, sissy here) is only ever sex-ad slang in this group's data
+    if any(_fold(w) in ("sisy", "sisies", "sisyboy") for w in words):
+        out.add("sexual")
+    # sexual GIF trading: "gif chatt varingala", "Gifs exchange dm me", "Gifs
+    # venuma", "Giffs chaat interested girls", "gif play". Posting a gif in
+    # the group ("send gif bro", "inga gif podunga") stays clean.
+    if any(_fold(w) in ("gif", "gifs", "gifz", "gifes") for w in words) and any(
+            _fold(w) in _GIF_TRADE or _fold(w).startswith(("varing", "varuving", "varingal", "chat"))
+            for w in words):
+        out.add("sexual")
     # "gays" next to an 18+ word: "gays only chat", "gays dm"
     if ("gays" in ws or "gayz" in ws) and ws & _GAYS_18:
         out.add("gender_orientation")
@@ -734,6 +797,11 @@ def check_text(text):
         # single-word term: exact token + common evasion variants rather
         # than raw substring (avoids matching "ass" inside "class")
         if category not in hit_categories and tok_vars & single_word_terms:
+            hit_categories.add(category)
+
+        # 1a) word broken into 1-2 letter pieces: "th e vu di ya"
+        if single_word_terms and category not in hit_categories and _short_piece_hit(
+                tokens, single_word_terms, PREFIX_ROOTS.get(category, ())):
             hit_categories.add(category)
 
         # 1b) letter-by-letter obfuscation of a single-word term
