@@ -1052,6 +1052,19 @@ def is_strong_ask(text):
 _ASKING_AROUND_RE = None
 
 
+_HOBBY_RE = re.compile(
+    r"\b(books?|reading|novels?|travel\w*|trips?|music|songs?|singing|movies?|films?|cricket|football|"
+    r"chess|games?|gaming|bgmi|free ?fire|study\w*|studies|exams?|coding|programming|cooking|recipes?|"
+    r"anime|kpop|bts|drawing|painting|art|quiz|debate|photography|dance|dancing|gym|fitness|yoga)\b")
+_ASK_INTENT_RE = re.compile(
+    r"\b(friendship|frndship|frnd|frnds|friends? ?ship|relationship|single|matured|mature|romance|romantic|"
+    r"night|thaniya\w*|alone|lonely|dating|date|love ?me|wife|aunty|aunties|housewife|married|genuine|"
+    r"hot|sexy|cute girls?|pesalam\w*|peslam\w*|vanga|vaanga|ping|private|personal|pvt)\b")
+_GIRLS_THERE_RE = re.compile(
+    r"\b(girls?|gals|ladies|aunties|auntys|womens|females|ponn?unga|ponn?uga|ponungal|housewives|"
+    r"house wifes|married girls|single girls)\s+(?:yaravathu\s+|yaarachum\s+|yarachu\s+)?"
+    r"(iruk+[a-z]*la+|iruk+[a-z]*laa+|iruk+[a-z]*lah|irukeng\w*|irukeeng\w*|irukeg\w*|irukig\w*)\b")
+
 def is_asking_around(text):
     """
     "Any girls here", "Any akka irukingala", "Any ladies for friendship",
@@ -1081,6 +1094,16 @@ def is_asking_around(text):
     if not _ASKING_AROUND_RE:
         return False
     low = normalize_unicode(tamil_to_tanglish(text)).lower()
+    # "Any girls here who love books, travelling... swap book recs": asking
+    # around for a shared hobby, with nothing about friendship, DMs or
+    # flirting, is ordinary group chat
+    if _HOBBY_RE.search(low) and not _ASK_INTENT_RE.search(low) and not any(
+            _anchor_base(t) for t in merge_split_anchors(tokenize(text))[0]):
+        return False
+    # "Tiruvannamalai girls irukkingala", "Bangalore ponnuga irukegala": a
+    # place (or nothing) instead of "any" - group of women + are-there question
+    if _GIRLS_THERE_RE.search(low) or _GIRLS_THERE_RE.search(collapse_runs(low)):
+        return True
     return bool(_ASKING_AROUND_RE.search(low) or _ASKING_AROUND_RE.search(collapse_runs(low)))
 
 
