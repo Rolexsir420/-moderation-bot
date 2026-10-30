@@ -896,6 +896,15 @@ def is_strong_ask(text):
             joined.append(t)
     # "Text if needed", "dm if interested", "ping me if u want": contact me
     # if you want it (sellers, ads). Not "if needed I'll text her".
+    # "Added dmmm", "added pm pls", "add panniten dm": I added you -> now DM
+    # me. A short message with "added" and a DM word that is not itself past
+    # ("dm panniten"): an ask, even though "added" is a past-tense word.
+    if len(tokens) <= 4 and any(collapse_runs(t) in ("aded", "adedd", "add", "adpaniten", "adpanniten")
+                                or re.fullmatch(r"ad+e+d+", t) for t in tokens):
+        _rest = [t for t in tokens if not re.fullmatch(r"ad+(e+d+)?", t)]
+        if any(_anchor_base(t) in ("dm", "pm", "inbox", "msg", "text") for t in _rest) and not any(
+                tag_of(canonical(t)) == "PAST" for t in _rest) and not is_refusal(text):
+            return True
     for _i, _t in enumerate(tokens[:-1]):
         if _anchor_base(_t) in ("text", "msg", "dm", "pm", "inbox", "ping") and (
                 tokens[_i + 1] == "if" or (tokens[_i + 1] == "me" and _i + 2 < len(tokens)
