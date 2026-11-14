@@ -292,6 +292,7 @@ _LEARNED = {
         # "kai adi..." = masturbate (slang, every hit in the dataset was this)
         "kai adi", "kai adich", "kai adika", "kai adikk", "kaiadi", "கை அடிச்ச", "கை அடிக்க",
         "fap", "faps", "fapping", "fapped", "fapper",
+        "soothu", "soothula", "soothule", "soothla", "soothai", "சூத்து", "சூத்துல",
         "otha", "oththa", "gotha", "badu", "devidiya", "dhevidiya",
         "தேவிடியா", "தேவுடியா", "கூதி", "வேசி", "மயிரு",
     },
@@ -358,6 +359,14 @@ _ZERO_WIDTH_RE = re.compile(
 _COMBINING_RE = re.compile(r"[̀-ͯ]")
 
 
+# small-capital letters NFKC leaves alone: "ᴛᴀᴍɪʟ ꜱᴇʟʟᴇʀ" -> "tamil seller"
+try:
+    from unicode_fold import fold as _fold_lookalikes   # table built from Unicode data
+except Exception:                                       # file missing: still runs
+    _fold_lookalikes = lambda t: t
+_SMALL_CAPS = str.maketrans("ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢ", "abcdefghijklmnopqrstuvwyz")
+
+
 def _normalize_unicode(text):
     """
     Folds "fancy font" unicode (fullwidth, mathematical bold/italic,
@@ -384,6 +393,8 @@ def _normalize_unicode(text):
     # (fullwidth "ｈｅｌｌｏ", mathematical "𝐡𝐞𝐥𝐥𝐨"/"𝙷𝙴𝙻𝙻𝙾", circled
     # "Ⓗⓔⓛⓛⓔ", etc.) down to their plain ASCII equivalents.
     text = unicodedata.normalize("NFKC", text)
+    text = text.translate(_SMALL_CAPS)
+    text = _fold_lookalikes(text)            # every look-alike letter: "Ꭰм ме" -> "dm me"
     text = _ZERO_WIDTH_RE.sub("", text)
     text = _COMBINING_RE.sub("", text)
     return text
@@ -488,6 +499,8 @@ def _phrase_hit(term, lowered):
 # them doesn't hit: "oru cpl of days" = "a couple of days".
 _SAFE_PHRASES_RE = re.compile(
     r"(?<![a-z0-9])cpl\s+of(?![a-z0-9])"
+    # "Soodhu Kavvum" / "Soothu kavum" is a Tamil film
+    r"|(?<![a-z0-9])soo?[dt]h?u+m?\s+kav+u+m(?![a-z0-9])"
     # ஒத்த = "one / single": "nee oththa sollu sollu", "otha roova", "otha
     # paarvai". The swear "Otha mass da" has no counting word after it.
     r"|(?<![a-z0-9])o+t+h*t*h*a+\s+(?:sol+u\w*|va+rth\w*|pa+rv\w*|ro+[ov]a\w*|ru+pa\w*|ru+bai\w*|"
@@ -527,11 +540,21 @@ def _csam_chunks(text):
             joined.append(out[i]); i += 1
     return joined
 
+_CP_SUFFIX = {"rp", "rape", "video", "videos", "vids", "vid", "link", "links", "seler", "group", "grup"}
+_CP_AD = {"rp", "rape", "colection", "collection", "vids", "videos", "vid", "link", "links", "grup",
+          "available", "avl", "price", "paid", "telegram", "mega", "folder", "drive"}
+
 
 def is_csam_spam(text):
     if not text:
         return False
     ch = _csam_chunks(_normalize_unicode(text))
+    # "cp" (child abuse material) sold or shared: "seller ... c*p_r*p", "cp
+    # all type group". Plain "cp" (copy-paste, cricket) never has these.
+    cp = [w for w in ch if w == "cp" or (w.startswith("cp") and w[2:] in _CP_SUFFIX)]
+    if cp and (any(w.startswith(("sel", "sale")) or w in _CP_AD for w in ch)
+               or any(w != "cp" for w in cp)):
+        return True
     for i, w in enumerate(ch):
         if any(w.startswith(c) and w[len(c):] in _CSAM_PORN for c in _CSAM_CHILD):
             return True  # glued: "childporn", "kidsnudes"
@@ -611,6 +634,8 @@ _DATING_INVITE = {"polam", "pogalam", "polama", "pogalama", "poalam", "vaanga", 
 def is_dating_pair(text):
     if not text:
         return False
+    # "House wife erukingala" = housewife
+    text = re.sub(r"(?i)\bhouse\s+wi(fe|ves|fes)\b", r"housewi\1", _normalize_unicode(text))
     words = [re.sub(r"[^a-z]", "", w) for w in _normalize_unicode(text).lower().split()]
     words = [w for w in words if w]
     # "anyone up for dating?", "dating polam", "any for dating"
@@ -624,7 +649,7 @@ def is_dating_pair(text):
         return True
     who = [i for i, w in enumerate(words) if w in _DATING_ONLY_WHO or w.startswith("housewi")]
     if who:
-        return any(w in _DATING_OFFER or w.startswith(("irukk", "iruk")) for w in words)
+        return any(w in _DATING_OFFER or w.startswith(("irukk", "iruk", "eruk")) for w in words)
     # "available" with a who-word: "girls available", "aunty available"
     if any(w in ("available", "availabe", "avaliable", "avl") for w in words):
         # "girls available", "realmeet available", "video call available",
@@ -688,6 +713,17 @@ _PAID_AD = {"girls", "girl", "aunty", "aunties", "ladies", "call", "vc", "video"
             "genuine", "escort", "spa", "nude", "nudes", "sex", "service", "paid", "price",
             "rate", "venumo", "venuma", "housewife", "housewives", "real", "verified", "demo"}
 
+_MEAT_FOOD = {"chicken", "mutton", "beef", "pork", "fish", "meen", "kozhi", "kadai", "shop", "kg", "kilo",
+              "biryani", "curry", "kulambu", "fry", "grill", "bbq", "price", "rate", "market", "fresh", "cook",
+              "cooking", "samayal", "veg", "nonveg", "protein", "eat", "eating", "sapadu", "sapdu"}
+_SLAVE_AD = {"boy", "boys", "girl", "girls", "any", "anyone", "want", "wanted", "need", "neded", "here",
+             "dm", "pm", "inbox", "master", "mistres", "maam", "madam", "queen", "goddess", "task", "tasks",
+             "vc", "ponunga", "ponuga", "ponu", "aunty", "aunties", "female", "females", "lady", "ladies",
+             "intrested", "interested", "seiren", "sonalum", "obey", "serve", "service", "feet", "foot",
+             "humiliation", "punish", "punishment", "btm", "bottom", "top", "role", "roleplay", "cuck"}
+_SLAVE_WORK = {"ofice", "company", "job", "boss", "mari", "mathiri", "madhiri", "scene", "movie", "padam",
+               "history", "slavery", "british", "kings", "king", "trade", "freedom", "sudhanthiram",
+               "suthanthiram", "exam", "study", "kaasu", "panam"}
 _BULL_CONTEXT = {"here", "any", "anyone", "boy", "boys", "wife", "cpl", "cpls", "couple", "couples", "hotwife",
                  "sisy", "master", "slave", "top", "btm", "bottom", "loking", "looking", "dm", "pm", "inbox",
                  "real", "meet", "realmeet", "size", "genuine", "ned", "neded", "need", "wanted", "want",
@@ -722,6 +758,26 @@ def is_context_hit(text):
                 _fold(w) in _BULL_CONTEXT or _fold(w).startswith(("cuck", "cuko", "cokold", "cockold", "expe"))
                 for w in words):
             out.add("sexual")
+    # "real meet" = meet in person for sex (Group Help logs: "Real cpl here
+    # for real meet dm", "Dindigul realmeet available"). Typed as realmeet,
+    # realmeat, real meat, reel meet, rl meet. "chicken meat kadai", "real
+    # madrid", "college la meet panlama" stay clean.
+    joined = " ".join(words)
+    if re.search(r"\b(real|reel|rel|rl|rial)\s?(meet|meat|met|mt|meetup)s?\b", joined) and not any(
+            w in _MEAT_FOOD for w in words):
+        out.add("relationship_dating")
+    # BDSM "slave" ads: "Any girl want slave boy", "Slave boy here intrested
+    # dm me", "I'm slave neenga enna sonalum seiren", "need mistress". Not
+    # "office la slave aa irukken", "slave mari velai", "Bahubali slave scene".
+    if any(_fold(w) in ("slave", "slaves", "slav", "sleve") for w in words):
+        if any(_fold(w) in _SLAVE_AD for w in words) and not any(
+                _fold(w) in _SLAVE_WORK or _fold(w).startswith(("velai", "vela", "ofic", "work", "salar"))
+                for w in words):
+            out.add("sexual")
+    if (any(_fold(w) in ("mistres", "mistreses", "dome", "femdom", "dominatrix") for w in words)
+            and not any(_fold(w) in ("schol", "head", "clas", "teacher", "miss", "staf") for w in words)) or \
+            re.search(r"\bfemale dom\b|\bdom (girl|female|aunty|lady)", " ".join(words)):
+        out.add("sexual")
     # "sissy" (siisy, sissy here) is only ever sex-ad slang in this group's data
     if any(_fold(w) in ("sisy", "sisies", "sisyboy") for w in words):
         out.add("sexual")
