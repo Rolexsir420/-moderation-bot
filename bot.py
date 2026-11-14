@@ -49,7 +49,8 @@ import review_log
 from predict import classify, load_weights
 from trainer import (is_direct_ask, parent_explains, is_cant_complaint,
                      context_is_about_messages, mentions_someones_message, is_refusal,
-                     is_strong_ask, is_asking_around, person_anchor_without_ask, is_moderation_talk, asks_for_me, innocent_reading)
+                     is_strong_ask, is_asking_around, person_anchor_without_ask, is_moderation_talk, asks_for_me, innocent_reading,
+                     only_add_ask, is_join_invite, scolds_asker)
 
 weights = load_weights()
 
@@ -664,6 +665,21 @@ async def moderate(client, message: Message, is_edit=False):
         should_mute = not rescued
         reason = "bare_dm_word_reply" if should_mute else "bare_dm_word_reply_rescued"
 
+    if should_mute and message.reply_to_message_id:
+        # replying to someone who asked for DMs, only to question or mock
+        # it: "Enna dash ku p..mm panna" <- "House wife erukingala"
+        _par = await get_parent_text(client, message)
+        if scolds_asker(_par, text):
+            should_mute = False
+            reason = "scolding_dm_asker"
+    if should_mute and only_add_ask(text):
+        # "enna add pannu" answering "yaaralam singing competition varinga?":
+        # add me to the competition/team/game, not a friend request
+        _ctx = [await get_parent_text(client, message)] if message.reply_to_message_id else []
+        _ctx += conversation_tracker.get_recent_chat_texts(message.chat.id, user_id)
+        if any(is_join_invite(c) for c in _ctx if c):
+            should_mute = False
+            reason = "add_join_reply"
     if should_mute:
         cmd_text = f".delmute {format_duration(config.DM_MUTE_HOURS)}h no dm"
         await send_cmd(message, cmd_text)
