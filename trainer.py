@@ -174,6 +174,13 @@ def tamil_to_tanglish(text):
     return "".join(out)
 
 
+try:
+    from unicode_fold import fold as _fold_lookalikes   # table built from Unicode data
+except Exception:                                       # file missing: still runs
+    _fold_lookalikes = lambda t: t
+_SMALL_CAPS = str.maketrans("ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡʏᴢ", "abcdefghijklmnopqrstuvwyz")
+
+
 def normalize_unicode(text):
     """
     Folds "fancy font" unicode (fullwidth, mathematical bold/italic,
@@ -194,6 +201,8 @@ def normalize_unicode(text):
             out.append(ch)
     text = "".join(out)
     text = unicodedata.normalize("NFKC", text)
+    text = text.translate(_SMALL_CAPS)
+    text = _fold_lookalikes(text)            # every look-alike letter: "Ꭰм ме" -> "dm me"
     text = _ZERO_WIDTH_RE.sub("", text)
     text = _COMBINING_RE.sub("", text)
     return text
@@ -309,6 +318,10 @@ _SEITHI = {"seithi", "seidhi", "seythi", "seydhi", "saithi", "seiti", "seyti", "
 _SEND_STEMS = ("anup", "anop", "sol", "pan", "podu", "potu", "pod", "kudu", "send")
 
 
+_SHORT_THANIYA = {"tnya", "thnya", "tniya", "thnia", "tnia", "thnyaa", "tnyaa", "thanya", "tanya", "taniya",
+                  "thaniyaa", "thania"}
+
+
 def read_like_human(tokens):
     """'persnL' -> personal, 'pers nl' -> personal, 'mesej' -> msg, 'peslama' -> pesalama."""
     out, i = [], 0
@@ -347,6 +360,26 @@ def read_like_human(tokens):
         if re.sub(r"(.)\1+", r"\1", out[k]) in _SEITHI and \
                 re.sub(r"(.)\1+", r"\1", out[k + 1]).startswith(_SEND_STEMS):
             out[k] = "msg"
+    # "Addedpannu malar", "Added pannu": "added" + a do-it verb is "add
+    # pannu" (add me), not something that already happened
+    fixed = []
+    for k, w in enumerate(out):
+        m = re.fullmatch(r"ad+e+d+(pan+\w*|pn+\w*)", w)
+        if m:
+            fixed += ["add", m.group(1)]
+        elif re.fullmatch(r"ad+e+d+", w) and k + 1 < len(out) and re.match(
+                r"pan+(u|unga|uga|ungal|ungalen|unge|uka)$|pn+u$", out[k + 1]):
+            fixed.append("add")
+        else:
+            fixed.append(w)
+    out = fixed
+    # "tnya paslm ma" = thaniya pesalama: vowel-dropped "thaniya" right before
+    # a talk/come word ("Tanya" alone is a name, so only in that shape)
+    for k in range(len(out) - 1):
+        if re.sub(r"(.)\1+", r"\1", out[k]) in _SHORT_THANIYA and re.sub(
+                r"(.)\1+", r"\1", out[k + 1]).startswith(("pes", "pas", "pa", "vaa", "va", "chat", "msg",
+                                                            "dm", "pm", "pe", "vang", "kup", "koop")):
+            out[k] = "thaniya"
     # "prsl ct", "pvt cht" = personal/private chat. "ct" alone stays as is
     # (CT scan, city), it is read as chat only right after one of those.
     for k in range(1, len(out)):
@@ -777,6 +810,15 @@ def is_refusal(text):
     """
     if _is_past_with_subject(text):
         return True
+    # sending someone elsewhere is a no: "Ganesh un message verayaru kitta
+    # pannu", "2 days na msg pannala nee yaravathu try pannu"
+    _lw = [collapse_runs(t) for t in tokenize(text)]
+    if any(_anchor_base(t) for t in _lw) and (
+            any(w in ("verayaru", "verayarum", "verayaravathu", "verayarukitta") for w in _lw)
+            or any(a == "vera" and b.startswith(("yar", "aal", "ponu", "pasan")) for a, b in zip(_lw, _lw[1:]))
+            or any(a.startswith(("yaravathu", "yaaravathu", "yarachum", "yaarachum")) and b.startswith("try")
+                   for a, b in zip(_lw, _lw[1:]))):
+        return True
     # Describing what happens, not asking: "Ponnu nu nenachi d(m) varuthu"
     # (DMs come thinking I'm a girl), "girls ku than msg pannuvinga" (you'd
     # only message girls), "oru ponu kooda enaku msg panala" (no girl
@@ -856,6 +898,10 @@ _MASSAGE_ADVICE = {collapse_runs(w) for w in ("oil", "kaal", "kal", "leg", "head
 
 
 _NUMBER_WORDS = {collapse_runs(w) for w in ("number", "num", "nmbr", "numbr", "nambar", "contact")}
+_NUM_OWNER = {collapse_runs(w) for w in (
+    "un", "unga", "ungal", "ungaloda", "unoda", "ur", "your", "yr", "u", "ungha", "nee", "neenga",
+    "phone", "ph", "mobile", "mob", "cell", "whatsapp", "wa", "wtsp", "watsapp", "contact", "ponnu",
+    "girls", "girl", "avanga", "ava", "her", "his")}
 _NOT_PHONE_NUMBER = {collapse_runs(w) for w in (
     "roll", "order", "register", "reg", "account", "acc", "seat", "table", "ticket", "bus",
     "flat", "door", "house", "room", "jersey", "aadhar", "aadhaar", "pan", "vehicle", "bike",
@@ -1014,6 +1060,11 @@ def is_strong_ask(text):
         if t not in _NUMBER_WORDS:
             continue
         if i > 0 and raw_n[i - 1] in _NOT_PHONE_NUMBER:
+            continue
+        # bare "num" is also the Tamil "-num" ending typed apart: "rasama eppdi
+        # sei ahh num sollu" = seiyanum (how to make it). Counts as "number"
+        # only with whose/phone next to it: "un num sollu", "whatsapp num kudu"
+        if t == "num" and i > 0 and not any(w in _NUM_OWNER for w in raw_n[max(0, i - 2):i]):
             continue
         if any(n in _GIVE_WORDS and n not in ("pls", "plz", "please") for n in raw_n[i + 1:i + 3]) and not any(
                 tag_of(canonical(w)) in ("PAST", "NEG") for w in raw_n):
@@ -1488,11 +1539,93 @@ _THIRD_PERSON = {collapse_runs(w) for w in ("him", "her", "them", "avana", "aval
                                              "avanuku", "avaluku", "avangaluku", "avanukku", "avalukku")}
 
 
+# --- talking ABOUT messages, not asking for a private chat ---------------
+#   "Msg ye therila", "pogala msg", "Naan msg panre..varla", "PM dlt panninga"
+#   -> a problem with messages; "Mes na enna", "Ena msg idk", "En text 😔"
+#   -> asking what a message is; "Text here", "inga msg pannunga", "Msg on
+#   panungaa vc laa" -> in the group itself. Never when a private word or
+#   dm/pm/inbox is used together with a here-word, or "me" follows the DM word.
+_MSG_PROBLEM = {collapse_runs(w) for w in (
+    "therila", "theriyala", "theriyale", "terla", "therla", "varla", "varala", "varalai", "varale", "varalaye",
+    "pogala", "pogalai", "pogale", "poga", "load", "loading", "dlt", "delete", "deleted", "delet", "deleat",
+    "seen", "kaanom", "kanom", "missing", "bug", "problem", "issue", "error",
+    "tired", "doubt", "doubte", "fail", "failed", "restrict", "restricted",
+    "spam", "kidaikala", "kedaikala", "reach", "deliver", "delivered", "sent", "pending")}
+_STRONG_PROBLEM = {collapse_runs(w) for w in ("dlt", "delete", "deleted", "delet", "deleat", "seen", "spam",
+                                             "restrict", "restricted", "bug", "error")}
+_MEANING = {collapse_runs(w) for w in ("na", "nna", "nu", "means", "meaning", "mean")}
+_WHAT_Q = {collapse_runs(w) for w in ("ena", "enna", "yenna", "what", "wat")}
+_WHOSE = {collapse_runs(w) for w in ("en", "un", "unga", "ennoda", "unnoda", "avan", "ava", "avanga", "his", "her")}
+_HERE = {collapse_runs(w) for w in ("here", "inga", "ingae", "inge", "ingaye", "ingaiye", "group", "grp", "gc",
+                                    "vc", "voice", "gp")}
+_HERE_ANCHORS = {"msg", "text", "add"}
+
+
+def about_messages(text):
+    toks = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
+    c = [collapse_runs(t) for t in toks]
+    has_req = any(t in _REQUEST_VERBS or tag_of(t) == "REQUEST" for t in toks)
+    private = any(_anchor_base(t) in ("dm", "pm", "inbox", "private", "personal", "whatsapp")
+                  or x in ("thaniya", "pvt", "secret", "separate", "outside") for t, x in zip(toks, c))
+    # "Please add me dm i m blocked": any "<DM word> me" makes it an ask
+    if any(_anchor_base(t) and i + 1 < len(c) and c[i + 1] in _SELF_WORDS for i, t in enumerate(toks)):
+        return None
+    for i, t in enumerate(toks):
+        base = _anchor_base(t)
+        if not base:
+            continue
+        me_next = False
+        strong = base in ("dm", "pm", "inbox")
+        # a problem with messages: "Msg ye therila", "Naan msg panre..varla",
+        # "PM dlt panninga"; a word BEFORE only right before and with no ask
+        # ("pogala msg", but not "Thukkam varala yarana msg panugala")
+        after = c[i + 1:i + 4]
+        before = c[i - 1:i] if i > 0 and not has_req else []
+        # dm/pm/inbox only with a clear problem word ("PM dlt panninga"),
+        # not "Pm Varathu" (PM will come)
+        probs = _STRONG_PROBLEM if strong else _MSG_PROBLEM
+        if any(w in probs for w in after + before):
+            return "message_problem"
+        # what a message is: "Mes na enna", "Ena msg idk"; whose message:
+        # "En text 😔" (a bare "Ena msg" stays an ask)
+        if not me_next and not has_req and not strong and len(toks) <= 4 and (
+                (i + 2 < len(c) and c[i + 1] in _MEANING and c[i + 2] in ("ena", "enna", "yenna"))
+                or (i > 0 and c[i - 1] in _WHAT_Q and i + 1 < len(c))
+                or (i > 0 and c[i - 1] in _WHOSE)):
+            return "what_message"
+        # in the group itself: "Text here", "inga msg pannunga", "Msg on
+        # panungaa vc laa" (not "Hello guy here ... msg panunga")
+        if base in _HERE_ANCHORS and not private and not any(
+                w in _ADD_TARGETS or w in ("bf", "gf", "lover", "partner", "boyfriend", "girlfriend") for w in c) and (
+                any(w in _HERE for w in c[i + 1:i + 5])
+                or any(w in _HERE - {"here"} for w in c[max(0, i - 3):i])):
+            return "in_group"
+    return None
+
+_AD_DESCRIBE = {collapse_runs(w) for w in ("is", "was", "um", "romba", "over", "super", "semma", "mokka",
+                                           "worst", "nalla", "nala", "nallave", "thanga", "kevalam", "cringe",
+                                           "funny", "awesome", "nice", "bore", "boring", "mathiri", "mari", "madhiri",
+                                           "patha", "paatha", "pathen", "vanthuchu", "varuthu", "varum", "vara")}
+_AD_WHICH = {collapse_runs(w) for w in ("unga", "antha", "intha", "entha", "every", "that", "this", "the",
+                                        "an", "tv", "youtube", "yt", "insta")}
+
 def innocent_reading(text):
     """Why a DM word here is harmless, or None. 'Msg in English', 'Neriya
     mssg', 'yaru msg uhh kaano', 'ping her', 'Contact him'."""
     toks = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
     raw = [collapse_runs(t) for t in tokenize(text)]
+    # "Tag potu msg panuga bro", "Tag panni message", "Tag me only for dolis
+    # msg": tag = mention me IN the group, then message there. Not when a
+    # private word is also there ("tag pannu dm la vaa").
+    _dm_me = any(_anchor_base(t) and i + 1 < len(toks) and collapse_runs(toks[i + 1]) in _SELF_WORDS
+                 for i, t in enumerate(toks))
+    if any(collapse_runs(t) in ("tag", "taag", "tagg", "mention") for t in raw[:4]) and not _dm_me and not any(
+            _anchor_base(t) in ("dm", "pm", "inbox", "private", "personal", "whatsapp")
+            or collapse_runs(t) in ("thaniya", "pvt", "secret", "separate") for t in toks):
+        return "tag_in_group"
+    about = about_messages(text)
+    if about:
+        return about
     found = None
     for i, tok in enumerate(toks):
         if not _anchor_base(tok):
@@ -1504,7 +1637,11 @@ def innocent_reading(text):
             return None                       # "msg pannunga", "msg me", "msg pannuvinga": an ask
         nxt = collapse_runs(toks[i + 1]) if i + 1 < len(toks) else ""
         prev = collapse_runs(toks[i - 1]) if i > 0 else ""
-        if _anchor_base(tok) == "personal" and nxt in ("feling", "felings", "life", "visayam", "vishayam"):
+        if _anchor_base(tok) == "add" and (nxt in _AD_DESCRIBE or prev in _AD_WHICH) and not any(
+                canonical(t) in _REQUEST_VERBS or tag_of(canonical(t)) == "REQUEST" or collapse_runs(t) in _SELF_WORDS
+                for t in toks):
+            found = "advert"                  # "Rakul preet ad is awesome", "Unga ad romba over", "Entha ad um ilama"
+        elif _anchor_base(tok) == "personal" and nxt in ("feling", "felings", "life", "visayam", "vishayam"):
             found = "personal_topic"          # "Personal feeling ah ka"
         elif nxt == "in" and i + 2 < len(toks) and collapse_runs(toks[i + 2]) in _LANG_WORDS:
             found = "language"                # "Msg in English"
@@ -1522,3 +1659,79 @@ def innocent_reading(text):
         else:
             return None                       # any other DM word: not covered
     return found
+
+
+# --- "add me" answering an invite to join something ---------------------
+# Vishnu: "yaaralam singing competition varinga?" -> Madan: "enna add
+# pannu" = add me to the competition, not "add me as a friend". Only for
+# messages whose ONLY DM word is "add", and only when the replied-to message
+# (or what other people said in the last 2 minutes) invites people to join.
+_JOIN_WHO = ("yaru", "yaar", "yaaru", "yaarum", "yaaralam", "yaralam", "yarelam", "yarellam", "who", "anyone",
+             "any1", "evlo", "ethana", "interested", "intrested", "join", "joining", "varinga", "varingala",
+             "vareengala", "varuvinga", "varuveenga", "ready", "venum", "venuma", "need", "wanted", "aal", "aalu",
+             "members", "players", "player", "slot", "slots", "list", "name", "names", "register")
+_JOIN_WHAT = ("competition", "compitition", "contest", "game", "games", "match", "team", "tournament",
+              "tourney", "quiz", "group", "grp", "gc", "vc", "voice", "singing", "song", "dance", "debate",
+              "cricket", "football", "bgmi", "pubg", "freefire", "ff", "ludo", "chess", "squad", "batch",
+              "class", "course", "event", "program", "show", "trip", "tour", "party", "list", "poll", "channel")
+
+_ADD_TARGETS = {collapse_runs(w) for w in ("girl", "girls", "gals", "aunty", "aunties", "ladies", "lady", "ponnu",
+                                           "ponnunga", "ponuga", "female", "females", "women", "akka", "sis",
+                                           "housewife", "single", "baby", "babe", "darling", "chellam", "dear")}
+
+
+def only_add_ask(text):
+    toks = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
+    bases = {_anchor_base(t) for t in toks if _anchor_base(t)}
+    # "girls add pannunga" is never about a competition
+    if any(collapse_runs(t) in _ADD_TARGETS for t in toks):
+        return False
+    return bases == {"add"}
+
+
+def is_join_invite(context_text):
+    if not context_text:
+        return False
+    w = [collapse_runs(t) for t in tokenize(context_text)]
+    who = any(x in {collapse_runs(j) for j in _JOIN_WHO} or x.startswith(("yaar", "yaru", "varing", "varee"))
+              for x in w)
+    what = any(x in {collapse_runs(j) for j in _JOIN_WHAT} for x in w)
+    return who and what
+
+
+# --- reply that scolds / questions someone who asked for DMs -------------
+#   "House wife erukingala"  <- "Enna dash ku p..mm panna"  (what for?)
+#   "Thaniya irukura girls and aunties vangaa" <- "Elei ... kekura yaru la nee"
+# The replied-to message is itself a DM / dating ask, and the reply only
+# questions or mocks it: no "me" after the DM word, no come/talk-to-me ask.
+_SCOLD = {collapse_runs(w) for w in (
+    "enna", "ena", "yen", "yenda", "enda", "why", "ethuku", "ethukku", "edhuku", "yethuku", "yaru", "yaaru",
+    "yaarda", "yaruda", "nee", "ne", "kekura", "kekkura", "kekura", "solra", "solura", "dash", "loosu", "lusu",
+    "venum", "venuma", "thevaiya", "theva", "shame", "chi", "cha", "kevalam", "kevalama", "pathetic", "seri",
+    "elei", "dei", "da", "podaa", "poda", "po", "report", "admin", "block")}
+
+
+def scolds_asker(parent_text, text):
+    if not parent_text or not text:
+        return False
+    parent_ask = is_strong_ask(parent_text) or is_asking_around(parent_text)
+    if not parent_ask:
+        # "Thaniya irukura girls and aunties vangaa", "House wife erukingala"
+        pw = [collapse_runs(t) for t in tokenize(parent_text.lower().replace("house wife", "housewife"))]
+        parent_ask = any(w in _ADD_TARGETS or w.startswith(("housewi", "aunt", "girl")) for w in pw) and any(
+            w.startswith(("vang", "vaang", "iruk", "eruk", "avail", "ping", "thaniya", "msg", "dm", "pm",
+                          "inbox", "pes", "chat")) for w in pw)
+    if not parent_ask:
+        try:
+            import blocklist as _bl
+            parent_ask = bool(_bl.check_text(parent_text)[1] & {"relationship_dating", "sexual"})
+        except Exception:
+            parent_ask = False
+    if not parent_ask or asks_for_me(text) or is_direct_ask(text):
+        return False
+    toks = [canonical(t) for t in split_glued(*merge_split_anchors(tokenize(text)))[0]]
+    c = [collapse_runs(t) for t in toks]
+    for i, t in enumerate(toks):
+        if _anchor_base(t) and i + 1 < len(c) and c[i + 1] in _SELF_WORDS:
+            return False                     # "... dm me" is an ask whatever came before
+    return sum(1 for w in c if w in _SCOLD) >= 1
